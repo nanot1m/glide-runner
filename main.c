@@ -847,7 +847,7 @@ int main(void)
    SetExitKey(0); // Disable default Esc-to-close behavior
 
    // Set the target FPS (optional)
-   // SetTargetFPS(120);
+   SetTargetFPS(120);
 
    // Initialize game state
    GameState game = {0};
