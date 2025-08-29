@@ -574,9 +574,6 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
 // Render level editor
 void RenderLevelEditor(const GameState *game)
 {
-   DrawText("LEVEL EDITOR", 20, 20, 32, DARKGRAY);
-   const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit", "Laser Trap"};
-   DrawText(TextFormat("Tool: %s (Tab to switch)", toolNames[editor.tool]), 20, 60, 18, BLUE);
 
    // Draw grid
    for (int x = 0; x <= WINDOW_WIDTH; x += SQUARE_SIZE)
@@ -587,8 +584,6 @@ void RenderLevelEditor(const GameState *game)
    {
       DrawLine(0, y, WINDOW_WIDTH, y, LIGHTGRAY);
    }
-
-   DrawText("Arrows/Mouse: Move cursor | Space/Left Click: Use tool | 1-5: Tools (5=Laser) | ESC: Menu", 20, 85, 18, DARKGRAY); // Draw placed squares
    for (int i = 0; i < editor.squareCount; i++)
    {
       DrawRectangleV(editor.squares[i].pos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GRAY);
@@ -604,6 +599,12 @@ void RenderLevelEditor(const GameState *game)
    DrawRectangleV(game->playerPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, BLUE);
    // Draw exit location as green square
    DrawRectangleV(game->exitPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GREEN);
+
+   DrawText("LEVEL EDITOR", 20, 20, 32, DARKGRAY);
+   const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit", "Laser Trap"};
+   DrawText(TextFormat("Tool: %s (Tab to switch)", toolNames[editor.tool]), 20, 60, 18, BLUE);
+   DrawText("Arrows/Mouse: Move cursor | Space/Left Click: Use tool | 1-5: Tools (5=Laser) | ESC: Menu", 20, 85, 18, DARKGRAY); // Draw placed squares
+
    // Draw cursor
    DrawRectangleLines((int)editor.cursor.x, (int)editor.cursor.y, SQUARE_SIZE, SQUARE_SIZE, RED);
 }
