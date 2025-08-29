@@ -29,13 +29,16 @@ static bool death = false;
 #define GRAVITY 1800.0f        // px/s^2
 #define MOVE_ACCEL 7000.0f     // px/s^2
 #define AIR_ACCEL 4200.0f      // px/s^2
-#define GROUND_FRICTION 0.52f  // applied each frame on ground
+#define GROUND_FRICTION 0.88f  // applied each frame on ground
 #define AIR_FRICTION 0.985f    // applied each frame in air (weak)
 #define MAX_SPEED_X 420.0f     // px/s
 #define MAX_SPEED_Y 1400.0f    // px/s
 #define JUMP_SPEED -620.0f     // px/s (negative is up)
 #define COYOTE_TIME 0.12f      // s — jump grace after leaving ground
 #define JUMP_BUFFER_TIME 0.12f // s — remember jump before landing
+
+// Ground contact tolerance: keeps player grounded briefly to avoid flicker
+#define GROUND_STICK_TIME 0.030f // 30 ms
 
 // Player hitbox (smaller than a tile so the player fits 1-tile gaps)
 #define PLAYER_W ((float)SQUARE_SIZE * 0.8f)
@@ -44,7 +47,11 @@ static bool death = false;
 // Crouch tuning
 #define PLAYER_H_CROUCH (PLAYER_H * 0.5f)
 #define MAX_SPEED_X_CROUCH 420.0f // px/s while crouching
-#define CROUCH_FRICTION 0.88f     // stronger ground damping while crouching
+#define CROUCH_FRICTION 0.97f     // weaker ground damping while crouching
+
+// Wall interaction tuning
+#define WALL_JUMP_PUSH_X 420.0f    // horizontal impulse on wall jump (px/s)
+#define WALL_SLIDE_MAX_FALL 260.0f // cap downward speed while sliding on wall (px/s)
 
 // Snap a pixel position to the editor grid
 static inline Vector2 SnapToGrid(Vector2 p)
@@ -137,7 +144,8 @@ typedef struct GameState
    float coyoteTimer;     // seconds left to allow jump after leaving ground
    float jumpBufferTimer; // seconds left to consume buffered jump
    Vector2 exitPos;
-   bool crouching; // crouch state
+   bool crouching;         // crouch state
+   float groundStickTimer; // seconds to remain grounded after contact
    // Add more game variables as needed
 } GameState;
 
@@ -346,9 +354,9 @@ void RenderVictory(void)
 
 void RenderDeath(void)
 {
-    DrawText("YOU DIED!", WINDOW_WIDTH / 2 - 120, WINDOW_HEIGHT / 2 - 60, 40, RED);
-    DrawText("You touched a laser.", WINDOW_WIDTH / 2 - 150, WINDOW_HEIGHT / 2 - 10, 24, DARKGRAY);
-    DrawText("Press Enter/Space/Esc to return to menu", WINDOW_WIDTH / 2 - 230, WINDOW_HEIGHT / 2 + 40, 20, BLUE);
+   DrawText("YOU DIED!", WINDOW_WIDTH / 2 - 120, WINDOW_HEIGHT / 2 - 60, 40, RED);
+   DrawText("You touched a laser.", WINDOW_WIDTH / 2 - 150, WINDOW_HEIGHT / 2 - 10, 24, DARKGRAY);
+   DrawText("Press Enter/Space/Esc to return to menu", WINDOW_WIDTH / 2 - 230, WINDOW_HEIGHT / 2 + 40, 20, BLUE);
 }
 
 // Helper: add block if not exists
@@ -429,6 +437,7 @@ void CreateDefaultLevel(GameState *game, LevelEditorState *editor)
 {
    game->playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
    game->exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+   game->groundStickTimer = 0.0f;
    editor->squareCount = 0;
    editor->laserCount = 0;
    FillPerimeter(editor);
@@ -614,6 +623,8 @@ void UpdateGame(GameState *game)
       game->coyoteTimer -= dt;
    if (game->jumpBufferTimer > 0.0f)
       game->jumpBufferTimer -= dt;
+   if (game->groundStickTimer > 0.0f)
+      game->groundStickTimer -= dt;
 
    // Read input
    bool wantJumpPress = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP);
@@ -654,6 +665,10 @@ void UpdateGame(GameState *game)
    }
    float aabbH = game->crouching ? PLAYER_H_CROUCH : PLAYER_H;
 
+   // Detect wall contact (1px probes on the sides of the current AABB)
+   bool touchingLeft = AABBOverlapsSolid(game->playerPos.x - 1.0f, game->playerPos.y, 1.0f, aabbH);
+   bool touchingRight = AABBOverlapsSolid(game->playerPos.x + PLAYER_W, game->playerPos.y, 1.0f, aabbH);
+
    // Buffer jump on press
    if (wantJumpPress)
       game->jumpBufferTimer = JUMP_BUFFER_TIME;
@@ -681,8 +696,24 @@ void UpdateGame(GameState *game)
       }
    }
 
+   // Wall jump: if airborne, touching a wall, and jump was just pressed
+   if (!game->crouching && !game->onGround && (touchingLeft || touchingRight) && wantJumpPress)
+   {
+      game->playerVel.y = JUMP_SPEED;
+      if (touchingLeft)
+         game->playerVel.x = WALL_JUMP_PUSH_X; // push to the right
+      if (touchingRight)
+         game->playerVel.x = -WALL_JUMP_PUSH_X; // push to the left
+   }
+
    // Gravity
    game->playerVel.y += GRAVITY * dt;
+
+   // Wall slide: limit fall speed while touching a wall and in air
+   if (!game->onGround && (touchingLeft || touchingRight) && game->playerVel.y > WALL_SLIDE_MAX_FALL)
+   {
+      game->playerVel.y = WALL_SLIDE_MAX_FALL;
+   }
 
    // Friction
    if (game->onGround)
@@ -715,11 +746,21 @@ void UpdateGame(GameState *game)
    game->onGround = false;
    ResolveAxis(&newY, &game->playerVel.y, newX, PLAYER_W, aabbH, true);
 
-   // If vertical velocity got zeroed due to collision while moving down, we are grounded
-   if (game->playerVel.y == 0.0f)
+   // Robust ground check with tolerance: thicker (2px) probe + short stick window
+   bool groundProbe = AABBOverlapsSolid(newX, newY + 2.0f, PLAYER_W, aabbH);
+   if (groundProbe && game->playerVel.y >= 0.0f)
    {
-      if (AABBOverlapsSolid(newX, newY + 1.0f, PLAYER_W, aabbH))
+      game->onGround = true;
+      game->groundStickTimer = GROUND_STICK_TIME; // refresh stick window
+      game->playerVel.y = 0.0f;                   // ensure stable rest
+   }
+   else
+   {
+      // If we were very recently grounded and not moving up, keep as grounded
+      if (game->groundStickTimer > 0.0f && game->playerVel.y <= 0.0f)
+      {
          game->onGround = true;
+      }
    }
 
    // Bounds as solid walls/floor/ceiling
@@ -763,12 +804,12 @@ void UpdateGame(GameState *game)
    // Death: if player's AABB overlaps any laser trap stripe
    for (int i = 0; i < editor.laserCount; i++)
    {
-       Rectangle laserBox = {editor.lasers[i].pos.x, editor.lasers[i].pos.y, (float)SQUARE_SIZE, 3.0f};
-       Rectangle playerBox = {game->playerPos.x, game->playerPos.y, PLAYER_W, aabbH};
-       if (CheckCollisionRecs(playerBox, laserBox))
-       {
-           death = true;
-       }
+      Rectangle laserBox = {editor.lasers[i].pos.x, editor.lasers[i].pos.y, (float)SQUARE_SIZE, 3.0f};
+      Rectangle playerBox = {game->playerPos.x, game->playerPos.y, PLAYER_W, aabbH};
+      if (CheckCollisionRecs(playerBox, laserBox))
+      {
+         death = true;
+      }
    }
 }
 
