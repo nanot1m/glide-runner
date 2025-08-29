@@ -1,7 +1,6 @@
 CC = gcc
 CFLAGS = -I/opt/homebrew/include
-LIBS = -L/opt/homebrew/lib -lraylib \
-       -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo
+LIBS = -L/opt/homebrew/lib -lraylib
 
 all: main
 
