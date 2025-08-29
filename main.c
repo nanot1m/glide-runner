@@ -14,6 +14,7 @@
 
 // Global victory flag
 static bool victory = false;
+static bool death = false;
 
 // Editor constants
 #define MAX_SQUARES 1024
@@ -28,7 +29,7 @@ static bool victory = false;
 #define GRAVITY 1800.0f        // px/s^2
 #define MOVE_ACCEL 7000.0f     // px/s^2
 #define AIR_ACCEL 4200.0f      // px/s^2
-#define GROUND_FRICTION 0.88f  // applied each frame on ground
+#define GROUND_FRICTION 0.52f  // applied each frame on ground
 #define AIR_FRICTION 0.985f    // applied each frame in air (weak)
 #define MAX_SPEED_X 420.0f     // px/s
 #define MAX_SPEED_Y 1400.0f    // px/s
@@ -39,6 +40,11 @@ static bool victory = false;
 // Player hitbox (smaller than a tile so the player fits 1-tile gaps)
 #define PLAYER_W ((float)SQUARE_SIZE * 0.8f)
 #define PLAYER_H ((float)SQUARE_SIZE * 0.9f)
+
+// Crouch tuning
+#define PLAYER_H_CROUCH (PLAYER_H * 0.5f)
+#define MAX_SPEED_X_CROUCH 420.0f // px/s while crouching
+#define CROUCH_FRICTION 0.88f     // stronger ground damping while crouching
 
 // Snap a pixel position to the editor grid
 static inline Vector2 SnapToGrid(Vector2 p)
@@ -62,7 +68,8 @@ typedef enum
    SCREEN_MENU,
    SCREEN_LEVEL_EDITOR,
    SCREEN_GAME_LEVEL,
-   SCREEN_VICTORY
+   SCREEN_VICTORY,
+   SCREEN_DEATH
 } ScreenState;
 
 // Menu options
@@ -84,6 +91,7 @@ typedef enum
    TOOL_ADD_BLOCK,
    TOOL_REMOVE_BLOCK,
    TOOL_EXIT,
+   TOOL_LASER_TRAP,
    TOOL_COUNT
 } EditorTool;
 
@@ -92,6 +100,8 @@ typedef struct
    Vector2 cursor;
    EditorSquare squares[MAX_SQUARES];
    int squareCount;
+   EditorSquare lasers[MAX_SQUARES];
+   int laserCount;
    EditorTool tool;
 } LevelEditorState;
 
@@ -127,6 +137,7 @@ typedef struct GameState
    float coyoteTimer;     // seconds left to allow jump after leaving ground
    float jumpBufferTimer; // seconds left to consume buffered jump
    Vector2 exitPos;
+   bool crouching; // crouch state
    // Add more game variables as needed
 } GameState;
 
@@ -183,15 +194,18 @@ static void ResolveAxis(float *pos, float *vel, float other, float w, float h, b
 {
    // Move step by step to the boundary of the next cell to avoid tunneling
    float remaining = *vel * GetFrameTime();
-   if (remaining == 0.0f) return;
+   if (remaining == 0.0f)
+      return;
    float sign = (remaining > 0) ? 1.0f : -1.0f;
    while (remaining != 0.0f)
    {
       float step = remaining;
       // limit step to at most one cell to avoid skipping
       float maxStep = (float)SQUARE_SIZE - 1.0f;
-      if (step >  maxStep) step =  maxStep;
-      if (step < -maxStep) step = -maxStep;
+      if (step > maxStep)
+         step = maxStep;
+      if (step < -maxStep)
+         step = -maxStep;
 
       float newPos = *pos + step;
       float x = vertical ? other : newPos;
@@ -238,6 +252,11 @@ void SaveLevel(const GameState *game, const LevelEditorState *editor)
    {
       fprintf(f, "BLOCK %d %d\n", (int)editor->squares[i].pos.x, (int)editor->squares[i].pos.y);
    }
+   // Save lasers
+   for (int i = 0; i < editor->laserCount; i++)
+   {
+      fprintf(f, "LASER %d %d\n", (int)editor->lasers[i].pos.x, (int)editor->lasers[i].pos.y);
+   }
    fclose(f);
 }
 
@@ -250,6 +269,7 @@ bool LoadLevel(GameState *game, LevelEditorState *editor)
    char type[16];
    int x, y;
    editor->squareCount = 0;
+   editor->laserCount = 0;
    while (fscanf(f, "%15s %d %d", type, &x, &y) == 3)
    {
       if (strcmp(type, "PLAYER") == 0)
@@ -264,6 +284,11 @@ bool LoadLevel(GameState *game, LevelEditorState *editor)
       {
          editor->squares[editor->squareCount].pos = (Vector2){x, y};
          editor->squareCount++;
+      }
+      else if (strcmp(type, "LASER") == 0 && editor->laserCount < MAX_SQUARES)
+      {
+         editor->lasers[editor->laserCount].pos = (Vector2){x, y};
+         editor->laserCount++;
       }
    }
    fclose(f);
@@ -311,19 +336,19 @@ void RenderMenu(int selected)
    DrawText("Use UP/DOWN arrows to navigate, Enter/Space to select", 20, 160, 18, DARKGRAY);
 }
 
-// Render game level (stub)
-void RenderGameLevel(void)
-{
-   DrawText("GAME LEVEL", 300, 200, 40, DARKGRAY);
-   DrawText("Press ESC to return to menu", 260, 300, 24, BLUE);
-}
-
 // Render victory screen
 void RenderVictory(void)
 {
-   DrawText("VICTORY!", WINDOW_WIDTH/2 - 100, WINDOW_HEIGHT/2 - 60, 40, GREEN);
-   DrawText("You reached the exit.", WINDOW_WIDTH/2 - 140, WINDOW_HEIGHT/2 - 10, 24, DARKGRAY);
-   DrawText("Press Enter/Space/Esc to return to menu", WINDOW_WIDTH/2 - 230, WINDOW_HEIGHT/2 + 40, 20, BLUE);
+   DrawText("VICTORY!", WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 - 60, 40, GREEN);
+   DrawText("You reached the exit.", WINDOW_WIDTH / 2 - 140, WINDOW_HEIGHT / 2 - 10, 24, DARKGRAY);
+   DrawText("Press Enter/Space/Esc to return to menu", WINDOW_WIDTH / 2 - 230, WINDOW_HEIGHT / 2 + 40, 20, BLUE);
+}
+
+void RenderDeath(void)
+{
+    DrawText("YOU DIED!", WINDOW_WIDTH / 2 - 120, WINDOW_HEIGHT / 2 - 60, 40, RED);
+    DrawText("You touched a laser.", WINDOW_WIDTH / 2 - 150, WINDOW_HEIGHT / 2 - 10, 24, DARKGRAY);
+    DrawText("Press Enter/Space/Esc to return to menu", WINDOW_WIDTH / 2 - 230, WINDOW_HEIGHT / 2 + 40, 20, BLUE);
 }
 
 // Helper: add block if not exists
@@ -333,6 +358,40 @@ void AddBlock(LevelEditorState *ed, Vector2 pos)
    {
       ed->squares[ed->squareCount].pos = pos;
       ed->squareCount++;
+   }
+}
+
+int FindLaserIndex(LevelEditorState *ed, Vector2 pos)
+{
+   for (int i = 0; i < ed->laserCount; ++i)
+   {
+      if (ed->lasers[i].pos.x == pos.x && ed->lasers[i].pos.y == pos.y)
+      {
+         return i;
+      }
+   }
+   return -1;
+}
+
+void AddLaser(LevelEditorState *ed, Vector2 pos)
+{
+   if (ed->laserCount < MAX_SQUARES && FindLaserIndex(ed, pos) == -1)
+   {
+      ed->lasers[ed->laserCount].pos = pos;
+      ed->laserCount++;
+   }
+}
+
+void RemoveLaser(LevelEditorState *ed, Vector2 pos)
+{
+   int idx = FindLaserIndex(ed, pos);
+   if (idx != -1)
+   {
+      for (int i = idx; i < ed->laserCount - 1; i++)
+      {
+         ed->lasers[i] = ed->lasers[i + 1];
+      }
+      ed->laserCount--;
    }
 }
 
@@ -371,6 +430,7 @@ void CreateDefaultLevel(GameState *game, LevelEditorState *editor)
    game->playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
    game->exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
    editor->squareCount = 0;
+   editor->laserCount = 0;
    FillPerimeter(editor);
 }
 
@@ -391,6 +451,8 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
       editor.tool = TOOL_REMOVE_BLOCK;
    if (IsKeyPressed(KEY_FOUR))
       editor.tool = TOOL_EXIT;
+   if (IsKeyPressed(KEY_FIVE))
+      editor.tool = TOOL_LASER_TRAP;
 
    // Arrow key repeat logic
    double now = GetTime();
@@ -466,6 +528,10 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
          {
             RemoveBlock(&editor, editor.cursor);
          }
+         if (FindLaserIndex(&editor, editor.cursor) != -1)
+         {
+            RemoveLaser(&editor, editor.cursor);
+         }
       }
       break;
    case TOOL_EXIT:
@@ -473,6 +539,15 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
       if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
       {
          game->exitPos = editor.cursor;
+      }
+      break;
+   case TOOL_LASER_TRAP:
+      if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+      {
+         if (FindLaserIndex(&editor, editor.cursor) == -1)
+         {
+            AddLaser(&editor, editor.cursor);
+         }
       }
       break;
    default:
@@ -491,7 +566,7 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
 void RenderLevelEditor(const GameState *game)
 {
    DrawText("LEVEL EDITOR", 20, 20, 32, DARKGRAY);
-   const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit"};
+   const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit", "Laser Trap"};
    DrawText(TextFormat("Tool: %s (Tab to switch)", toolNames[editor.tool]), 20, 60, 18, BLUE);
 
    // Draw grid
@@ -504,11 +579,17 @@ void RenderLevelEditor(const GameState *game)
       DrawLine(0, y, WINDOW_WIDTH, y, LIGHTGRAY);
    }
 
-   DrawText("Arrows/Mouse: Move cursor | Space/Left Click: Use tool | 1-4: Tools | ESC: Menu", 20, 85, 18, DARKGRAY);
-   // Draw placed squares
+   DrawText("Arrows/Mouse: Move cursor | Space/Left Click: Use tool | 1-5: Tools (5=Laser) | ESC: Menu", 20, 85, 18, DARKGRAY); // Draw placed squares
    for (int i = 0; i < editor.squareCount; i++)
    {
       DrawRectangleV(editor.squares[i].pos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GRAY);
+   }
+   // Draw laser traps as a red stripe at the top of the tile
+   for (int i = 0; i < editor.laserCount; i++)
+   {
+      int lx = (int)editor.lasers[i].pos.x;
+      int ly = (int)editor.lasers[i].pos.y + 1;
+      DrawRectangle(lx, ly, SQUARE_SIZE, 3, RED); // 3 px high at top edge
    }
    // Draw player location as blue square
    DrawRectangleV(game->playerPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, BLUE);
@@ -521,7 +602,7 @@ void RenderLevelEditor(const GameState *game)
 // Update game logic
 void UpdateGame(GameState *game)
 {
-   if (victory)
+   if (victory || death)
       return;
 
    float dt = GetFrameTime();
@@ -538,26 +619,66 @@ void UpdateGame(GameState *game)
    bool wantJumpPress = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP);
    bool left = IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT);
    bool right = IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT);
+   bool down = IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN);
+
+   // --- CROUCH state & AABB height management ---
+   // Keep player feet anchored (playerPos stores top-left)
+   float currentH = game->crouching ? PLAYER_H_CROUCH : PLAYER_H;
+   if (down)
+   {
+      if (!game->crouching)
+      {
+         float dy = PLAYER_H - PLAYER_H_CROUCH; // lower top so feet stay
+         float ny = game->playerPos.y + dy;
+         if (!AABBOverlapsSolid(game->playerPos.x, ny, PLAYER_W, PLAYER_H_CROUCH))
+         {
+            game->playerPos.y = ny;
+            game->crouching = true;
+            currentH = PLAYER_H_CROUCH;
+         }
+      }
+   }
+   else
+   {
+      if (game->crouching)
+      {
+         float dy = PLAYER_H - PLAYER_H_CROUCH; // raise top back if room
+         float ny = game->playerPos.y - dy;
+         if (!AABBOverlapsSolid(game->playerPos.x, ny, PLAYER_W, PLAYER_H))
+         {
+            game->playerPos.y = ny;
+            game->crouching = false;
+            currentH = PLAYER_H;
+         }
+      }
+   }
+   float aabbH = game->crouching ? PLAYER_H_CROUCH : PLAYER_H;
 
    // Buffer jump on press
    if (wantJumpPress)
       game->jumpBufferTimer = JUMP_BUFFER_TIME;
 
-   // Horizontal acceleration
+   // Horizontal acceleration (disabled while crouching)
    float accelX = 0.0f;
-   if (left && !right)
-      accelX = (game->onGround ? -MOVE_ACCEL : -AIR_ACCEL);
-   if (right && !left)
-      accelX = (game->onGround ? MOVE_ACCEL : AIR_ACCEL);
+   if (!game->crouching)
+   {
+      if (left && !right)
+         accelX = (game->onGround ? -MOVE_ACCEL : -AIR_ACCEL);
+      if (right && !left)
+         accelX = (game->onGround ? MOVE_ACCEL : AIR_ACCEL);
+   }
    game->playerVel.x += accelX * dt;
 
    // Use buffered jump if allowed by coyote/onGround
-   if ((game->onGround || game->coyoteTimer > 0.0f) && game->jumpBufferTimer > 0.0f)
+   if (!game->crouching)
    {
-      game->playerVel.y = JUMP_SPEED;
-      game->onGround = false;
-      game->coyoteTimer = 0.0f;
-      game->jumpBufferTimer = 0.0f;
+      if ((game->onGround || game->coyoteTimer > 0.0f) && game->jumpBufferTimer > 0.0f)
+      {
+         game->playerVel.y = JUMP_SPEED;
+         game->onGround = false;
+         game->coyoteTimer = 0.0f;
+         game->jumpBufferTimer = 0.0f;
+      }
    }
 
    // Gravity
@@ -565,15 +686,20 @@ void UpdateGame(GameState *game)
 
    // Friction
    if (game->onGround)
-      game->playerVel.x *= GROUND_FRICTION;
+   {
+      game->playerVel.x *= (game->crouching ? CROUCH_FRICTION : GROUND_FRICTION);
+   }
    else
+   {
       game->playerVel.x *= AIR_FRICTION;
+   }
 
    // Clamp speeds
-   if (game->playerVel.x > MAX_SPEED_X)
-      game->playerVel.x = MAX_SPEED_X;
-   if (game->playerVel.x < -MAX_SPEED_X)
-      game->playerVel.x = -MAX_SPEED_X;
+   float maxX = game->crouching ? MAX_SPEED_X_CROUCH : MAX_SPEED_X;
+   if (game->playerVel.x > maxX)
+      game->playerVel.x = maxX;
+   if (game->playerVel.x < -maxX)
+      game->playerVel.x = -maxX;
    if (game->playerVel.y > MAX_SPEED_Y)
       game->playerVel.y = MAX_SPEED_Y;
    if (game->playerVel.y < -MAX_SPEED_Y)
@@ -582,17 +708,17 @@ void UpdateGame(GameState *game)
    // Move & collide: separate axis resolution
    float newX = game->playerPos.x;
    float newY = game->playerPos.y;
-   ResolveAxis(&newX, &game->playerVel.x, newY, PLAYER_W, PLAYER_H, false);
+   ResolveAxis(&newX, &game->playerVel.x, newY, PLAYER_W, aabbH, false);
 
    // Y axis
    bool wasGround = game->onGround;
    game->onGround = false;
-   ResolveAxis(&newY, &game->playerVel.y, newX, PLAYER_W, PLAYER_H, true);
+   ResolveAxis(&newY, &game->playerVel.y, newX, PLAYER_W, aabbH, true);
 
    // If vertical velocity got zeroed due to collision while moving down, we are grounded
    if (game->playerVel.y == 0.0f)
    {
-      if (AABBOverlapsSolid(newX, newY + 1.0f, PLAYER_W, PLAYER_H))
+      if (AABBOverlapsSolid(newX, newY + 1.0f, PLAYER_W, aabbH))
          game->onGround = true;
    }
 
@@ -612,9 +738,9 @@ void UpdateGame(GameState *game)
       newY = 0;
       game->playerVel.y = 0;
    }
-   if (newY > WINDOW_HEIGHT - PLAYER_H)
+   if (newY > WINDOW_HEIGHT - aabbH)
    {
-      newY = WINDOW_HEIGHT - PLAYER_H;
+      newY = WINDOW_HEIGHT - aabbH;
       game->playerVel.y = 0;
       game->onGround = true;
    }
@@ -627,11 +753,22 @@ void UpdateGame(GameState *game)
       game->coyoteTimer = COYOTE_TIME;
 
    // Victory: if player's AABB overlaps the exit tile
-   Rectangle playerBox = { game->playerPos.x, game->playerPos.y, PLAYER_W, PLAYER_H };
-   Rectangle exitBox   = { game->exitPos.x,   game->exitPos.y,   (float)SQUARE_SIZE, (float)SQUARE_SIZE };
+   Rectangle playerBox = {game->playerPos.x, game->playerPos.y, PLAYER_W, aabbH};
+   Rectangle exitBox = {game->exitPos.x, game->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE};
    if (CheckCollisionRecs(playerBox, exitBox))
    {
       victory = true;
+   }
+
+   // Death: if player's AABB overlaps any laser trap stripe
+   for (int i = 0; i < editor.laserCount; i++)
+   {
+       Rectangle laserBox = {editor.lasers[i].pos.x, editor.lasers[i].pos.y, (float)SQUARE_SIZE, 3.0f};
+       Rectangle playerBox = {game->playerPos.x, game->playerPos.y, PLAYER_W, aabbH};
+       if (CheckCollisionRecs(playerBox, laserBox))
+       {
+           death = true;
+       }
    }
 }
 
@@ -643,8 +780,16 @@ void RenderGame(const GameState *game)
    {
       DrawRectangleV(editor.squares[i].pos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GRAY);
    }
+   // Draw laser traps as red stripes at the top of their tiles
+   for (int i = 0; i < editor.laserCount; i++)
+   {
+      int lx = (int)editor.lasers[i].pos.x;
+      int ly = (int)editor.lasers[i].pos.y + 1;
+      DrawRectangle(lx, ly, SQUARE_SIZE, 3, RED);
+   }
    // Draw player as blue square
-   DrawRectangleV(game->playerPos, (Vector2){PLAYER_W, PLAYER_H}, BLUE);
+   float aabbH = game->crouching ? PLAYER_H_CROUCH : PLAYER_H;
+   DrawRectangleV(game->playerPos, (Vector2){PLAYER_W, aabbH}, BLUE);
    // Draw exit as green square
    DrawRectangleV(game->exitPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GREEN);
    // Output actual FPS
@@ -673,6 +818,7 @@ int main(void)
    game.jumpBufferTimer = 0.0f;
    // Offset by one block from right bottom for exit
    game.exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+   game.crouching = false;
 
    // Initialize screen state
    ScreenState screen = SCREEN_MENU;
@@ -732,6 +878,11 @@ int main(void)
             break;
          }
          UpdateGame(&game);
+         if (death)
+         {
+            screen = SCREEN_DEATH;
+            break;
+         }
          BeginDrawing();
          ClearBackground(RAYWHITE);
          RenderGame(&game);
@@ -741,6 +892,18 @@ int main(void)
          if (victory)
          {
             screen = SCREEN_VICTORY;
+         }
+         break;
+      }
+      case SCREEN_DEATH:
+      {
+         BeginDrawing();
+         ClearBackground(RAYWHITE);
+         RenderDeath();
+         EndDrawing();
+         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
+         {
+            screen = SCREEN_MENU;
          }
          break;
       }
@@ -763,6 +926,7 @@ int main(void)
          editorLoaded = false;
          gameLevelLoaded = false;
          victory = false;
+         death = false;
       }
    }
 
