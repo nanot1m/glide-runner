@@ -1,0 +1,773 @@
+#include "raylib.h"
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
+#ifdef _WIN32
+#include <direct.h> // _mkdir
+#else
+#include <sys/stat.h> // mkdir
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+#include <errno.h>
+#include <math.h>
+
+// Global victory flag
+static bool victory = false;
+
+// Editor constants
+#define MAX_SQUARES 1024
+#define SQUARE_SIZE 20
+#define LEVEL_FILE "levels/level1.txt"
+
+// Window constants
+#define WINDOW_WIDTH 800
+#define WINDOW_HEIGHT 600
+
+// --- Physics tuning (feel free to tweak) ---
+#define GRAVITY 1800.0f        // px/s^2
+#define MOVE_ACCEL 7000.0f     // px/s^2
+#define AIR_ACCEL 4200.0f      // px/s^2
+#define GROUND_FRICTION 0.88f  // applied each frame on ground
+#define AIR_FRICTION 0.985f    // applied each frame in air (weak)
+#define MAX_SPEED_X 420.0f     // px/s
+#define MAX_SPEED_Y 1400.0f    // px/s
+#define JUMP_SPEED -620.0f     // px/s (negative is up)
+#define COYOTE_TIME 0.12f      // s — jump grace after leaving ground
+#define JUMP_BUFFER_TIME 0.12f // s — remember jump before landing
+
+// Player hitbox (smaller than a tile so the player fits 1-tile gaps)
+#define PLAYER_W ((float)SQUARE_SIZE * 0.8f)
+#define PLAYER_H ((float)SQUARE_SIZE * 0.9f)
+
+// Snap a pixel position to the editor grid
+static inline Vector2 SnapToGrid(Vector2 p)
+{
+   int gx = ((int)p.x / SQUARE_SIZE) * SQUARE_SIZE;
+   int gy = ((int)p.y / SQUARE_SIZE) * SQUARE_SIZE;
+   if (gx < 0)
+      gx = 0;
+   if (gx > WINDOW_WIDTH - SQUARE_SIZE)
+      gx = WINDOW_WIDTH - SQUARE_SIZE;
+   if (gy < 0)
+      gy = 0;
+   if (gy > WINDOW_HEIGHT - SQUARE_SIZE)
+      gy = WINDOW_HEIGHT - SQUARE_SIZE;
+   return (Vector2){(float)gx, (float)gy};
+}
+
+// Screen states
+typedef enum
+{
+   SCREEN_MENU,
+   SCREEN_LEVEL_EDITOR,
+   SCREEN_GAME_LEVEL,
+   SCREEN_VICTORY
+} ScreenState;
+
+// Menu options
+#define MENU_OPTION_COUNT 2
+typedef enum
+{
+   MENU_LEVEL_EDITOR,
+   MENU_GAME_LEVEL
+} MenuOption;
+
+typedef struct
+{
+   Vector2 pos;
+} EditorSquare;
+
+typedef enum
+{
+   TOOL_PLAYER,
+   TOOL_ADD_BLOCK,
+   TOOL_REMOVE_BLOCK,
+   TOOL_EXIT,
+   TOOL_COUNT
+} EditorTool;
+
+typedef struct
+{
+   Vector2 cursor;
+   EditorSquare squares[MAX_SQUARES];
+   int squareCount;
+   EditorTool tool;
+} LevelEditorState;
+
+// Editor state (global for simplicity)
+static LevelEditorState editor = {0};
+
+// Editor input timing
+static double arrowLastTime = 0;
+static double arrowInterval = 0.2; // 200ms
+
+static void EnsureLevelsDir(void)
+{
+#ifdef _WIN32
+   if (_mkdir("levels") == -1 && errno != EEXIST)
+   {
+      // ignore errors other than "already exists"
+   }
+#else
+   if (mkdir("levels", 0755) == -1 && errno != EEXIST)
+   {
+      // ignore errors other than "already exists"
+   }
+#endif
+}
+
+// Define game state structure
+typedef struct GameState
+{
+   int score;
+   Vector2 playerPos;     // top-left corner of player AABB
+   Vector2 playerVel;     // px/s
+   bool onGround;         // is standing on a block or floor
+   float coyoteTimer;     // seconds left to allow jump after leaving ground
+   float jumpBufferTimer; // seconds left to consume buffered jump
+   Vector2 exitPos;
+   // Add more game variables as needed
+} GameState;
+
+// ---- Grid collision helpers ----
+static inline int WorldToCellX(float x) { return (int)floorf(x / (float)SQUARE_SIZE); }
+static inline int WorldToCellY(float y) { return (int)floorf(y / (float)SQUARE_SIZE); }
+static inline float CellToWorld(int c) { return (float)(c * SQUARE_SIZE); }
+
+// Helper: check if block exists at position
+int FindBlockIndex(const LevelEditorState *ed, Vector2 pos)
+{
+   for (int i = 0; i < ed->squareCount; i++)
+   {
+      if (ed->squares[i].pos.x == pos.x && ed->squares[i].pos.y == pos.y)
+      {
+         return i;
+      }
+   }
+   return -1;
+}
+
+static bool BlockAtCell(int cx, int cy)
+{
+   if (cx < 0 || cy < 0)
+      return true; // treat outside as solid
+   if (CellToWorld(cx) > WINDOW_WIDTH - SQUARE_SIZE)
+      return true;
+   if (CellToWorld(cy) > WINDOW_HEIGHT - SQUARE_SIZE)
+      return true;
+   Vector2 tilePos = {CellToWorld(cx), CellToWorld(cy)};
+   return FindBlockIndex(&editor, tilePos) != -1;
+}
+
+// Check if any grid cell overlapped by an AABB is solid
+static bool AABBOverlapsSolid(float x, float y, float w, float h)
+{
+   int left = WorldToCellX(x);
+   int right = WorldToCellX(x + w - 0.001f);
+   int top = WorldToCellY(y);
+   int bottom = WorldToCellY(y + h - 0.001f);
+   for (int cy = top; cy <= bottom; ++cy)
+   {
+      for (int cx = left; cx <= right; ++cx)
+      {
+         if (BlockAtCell(cx, cy))
+            return true;
+      }
+   }
+   return false;
+}
+
+// Resolve movement along one axis (swept), returns corrected position and zeroes velocity on impact
+static void ResolveAxis(float *pos, float *vel, float other, float w, float h, bool vertical)
+{
+   // Move step by step to the boundary of the next cell to avoid tunneling
+   float remaining = *vel * GetFrameTime();
+   if (remaining == 0.0f) return;
+   float sign = (remaining > 0) ? 1.0f : -1.0f;
+   while (remaining != 0.0f)
+   {
+      float step = remaining;
+      // limit step to at most one cell to avoid skipping
+      float maxStep = (float)SQUARE_SIZE - 1.0f;
+      if (step >  maxStep) step =  maxStep;
+      if (step < -maxStep) step = -maxStep;
+
+      float newPos = *pos + step;
+      float x = vertical ? other : newPos;
+      float y = vertical ? newPos : other;
+      if (AABBOverlapsSolid(x, y, w, h))
+      {
+         // move to contact by moving pixel-by-pixel opposite direction until free
+         int pixels = (int)fabsf(step);
+         for (int i = 0; i < pixels; ++i)
+         {
+            newPos = *pos + sign; // move 1 pixel
+            x = vertical ? other : newPos;
+            y = vertical ? newPos : other;
+            if (AABBOverlapsSolid(x, y, w, h))
+            {
+               // collision at this pixel; stop just before contact
+               *vel = 0.0f;
+               return;
+            }
+            *pos = newPos;
+         }
+      }
+      else
+      {
+         *pos = newPos;
+      }
+      remaining -= step;
+   }
+}
+
+// Save level to file
+void SaveLevel(const GameState *game, const LevelEditorState *editor)
+{
+   EnsureLevelsDir();
+   FILE *f = fopen(LEVEL_FILE, "w");
+   if (!f)
+      return;
+   // Save player position
+   fprintf(f, "PLAYER %d %d\n", (int)game->playerPos.x, (int)game->playerPos.y);
+   // Save exit position
+   fprintf(f, "EXIT %d %d\n", (int)game->exitPos.x, (int)game->exitPos.y);
+   // Save blocks
+   for (int i = 0; i < editor->squareCount; i++)
+   {
+      fprintf(f, "BLOCK %d %d\n", (int)editor->squares[i].pos.x, (int)editor->squares[i].pos.y);
+   }
+   fclose(f);
+}
+
+// Load level from file
+bool LoadLevel(GameState *game, LevelEditorState *editor)
+{
+   FILE *f = fopen(LEVEL_FILE, "r");
+   if (!f)
+      return false;
+   char type[16];
+   int x, y;
+   editor->squareCount = 0;
+   while (fscanf(f, "%15s %d %d", type, &x, &y) == 3)
+   {
+      if (strcmp(type, "PLAYER") == 0)
+      {
+         game->playerPos = (Vector2){x, y};
+      }
+      else if (strcmp(type, "EXIT") == 0)
+      {
+         game->exitPos = (Vector2){x, y};
+      }
+      else if (strcmp(type, "BLOCK") == 0 && editor->squareCount < MAX_SQUARES)
+      {
+         editor->squares[editor->squareCount].pos = (Vector2){x, y};
+         editor->squareCount++;
+      }
+   }
+   fclose(f);
+   return true;
+}
+
+// Update menu logic
+void UpdateMenu(ScreenState *screen, int *selected)
+{
+   // Navigate menu
+   if (IsKeyPressed(KEY_DOWN))
+   {
+      (*selected)++;
+      if (*selected >= MENU_OPTION_COUNT)
+         *selected = 0;
+   }
+   if (IsKeyPressed(KEY_UP))
+   {
+      (*selected)--;
+      if (*selected < 0)
+         *selected = MENU_OPTION_COUNT - 1;
+   }
+   // Select option
+   if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+   {
+      if (*selected == MENU_LEVEL_EDITOR)
+      {
+         *screen = SCREEN_LEVEL_EDITOR;
+      }
+      else if (*selected == MENU_GAME_LEVEL)
+      {
+         *screen = SCREEN_GAME_LEVEL;
+      }
+   }
+}
+
+// Render menu
+void RenderMenu(int selected)
+{
+   DrawText("MAIN MENU", 20, 20, 40, DARKGRAY);
+   Color color1 = (selected == MENU_LEVEL_EDITOR) ? RED : BLUE;
+   Color color2 = (selected == MENU_GAME_LEVEL) ? RED : BLUE;
+   DrawText("> Open Level Editor", 20, 70, 24, color1);
+   DrawText("> Start Game Level", 20, 110, 24, color2);
+   DrawText("Use UP/DOWN arrows to navigate, Enter/Space to select", 20, 160, 18, DARKGRAY);
+}
+
+// Render game level (stub)
+void RenderGameLevel(void)
+{
+   DrawText("GAME LEVEL", 300, 200, 40, DARKGRAY);
+   DrawText("Press ESC to return to menu", 260, 300, 24, BLUE);
+}
+
+// Render victory screen
+void RenderVictory(void)
+{
+   DrawText("VICTORY!", WINDOW_WIDTH/2 - 100, WINDOW_HEIGHT/2 - 60, 40, GREEN);
+   DrawText("You reached the exit.", WINDOW_WIDTH/2 - 140, WINDOW_HEIGHT/2 - 10, 24, DARKGRAY);
+   DrawText("Press Enter/Space/Esc to return to menu", WINDOW_WIDTH/2 - 230, WINDOW_HEIGHT/2 + 40, 20, BLUE);
+}
+
+// Helper: add block if not exists
+void AddBlock(LevelEditorState *ed, Vector2 pos)
+{
+   if (ed->squareCount < MAX_SQUARES && FindBlockIndex(ed, pos) == -1)
+   {
+      ed->squares[ed->squareCount].pos = pos;
+      ed->squareCount++;
+   }
+}
+
+// Helper: remove block if exists
+void RemoveBlock(LevelEditorState *ed, Vector2 pos)
+{
+   int idx = FindBlockIndex(ed, pos);
+   if (idx != -1)
+   {
+      for (int i = idx; i < ed->squareCount - 1; i++)
+      {
+         ed->squares[i] = ed->squares[i + 1];
+      }
+      ed->squareCount--;
+   }
+}
+
+// Fill perimeter with blocks
+void FillPerimeter(LevelEditorState *ed)
+{
+   for (int x = 0; x < WINDOW_WIDTH; x += SQUARE_SIZE)
+   {
+      AddBlock(ed, (Vector2){x, 0});
+      AddBlock(ed, (Vector2){x, WINDOW_HEIGHT - SQUARE_SIZE});
+   }
+   for (int y = SQUARE_SIZE; y < WINDOW_HEIGHT - SQUARE_SIZE; y += SQUARE_SIZE)
+   {
+      AddBlock(ed, (Vector2){0, y});
+      AddBlock(ed, (Vector2){WINDOW_WIDTH - SQUARE_SIZE, y});
+   }
+}
+
+// Create default level
+void CreateDefaultLevel(GameState *game, LevelEditorState *editor)
+{
+   game->playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+   game->exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+   editor->squareCount = 0;
+   FillPerimeter(editor);
+}
+
+// Update level editor logic
+void UpdateLevelEditor(ScreenState *screen, GameState *game)
+{
+   // Switch tool with Tab
+   if (IsKeyPressed(KEY_TAB))
+   {
+      editor.tool = (editor.tool + 1) % TOOL_COUNT;
+   }
+   // Hotkeys 1..4 to select tools directly
+   if (IsKeyPressed(KEY_ONE))
+      editor.tool = TOOL_PLAYER;
+   if (IsKeyPressed(KEY_TWO))
+      editor.tool = TOOL_ADD_BLOCK;
+   if (IsKeyPressed(KEY_THREE))
+      editor.tool = TOOL_REMOVE_BLOCK;
+   if (IsKeyPressed(KEY_FOUR))
+      editor.tool = TOOL_EXIT;
+
+   // Arrow key repeat logic
+   double now = GetTime();
+   bool moved = false;
+   if (now - arrowLastTime >= arrowInterval)
+   {
+      if (IsKeyDown(KEY_RIGHT))
+      {
+         editor.cursor.x += SQUARE_SIZE;
+         moved = true;
+      }
+      if (IsKeyDown(KEY_LEFT))
+      {
+         editor.cursor.x -= SQUARE_SIZE;
+         moved = true;
+      }
+      if (IsKeyDown(KEY_UP))
+      {
+         editor.cursor.y -= SQUARE_SIZE;
+         moved = true;
+      }
+      if (IsKeyDown(KEY_DOWN))
+      {
+         editor.cursor.y += SQUARE_SIZE;
+         moved = true;
+      }
+      if (moved)
+         arrowLastTime = now;
+   }
+
+   // Mouse control: snap cursor to grid under mouse when inside window
+   Vector2 mouse = GetMousePosition();
+   if (mouse.x >= 0 && mouse.x < WINDOW_WIDTH && mouse.y >= 0 && mouse.y < WINDOW_HEIGHT)
+   {
+      editor.cursor = SnapToGrid(mouse);
+   }
+
+   // Clamp cursor to window
+   if (editor.cursor.x < 0)
+      editor.cursor.x = 0;
+   if (editor.cursor.x > WINDOW_WIDTH - SQUARE_SIZE)
+      editor.cursor.x = WINDOW_WIDTH - SQUARE_SIZE;
+   if (editor.cursor.y < 0)
+      editor.cursor.y = 0;
+   if (editor.cursor.y > WINDOW_HEIGHT - SQUARE_SIZE)
+      editor.cursor.y = WINDOW_HEIGHT - SQUARE_SIZE;
+
+   // Tool actions
+   switch (editor.tool)
+   {
+   case TOOL_PLAYER:
+      // Set player position with space or left mouse button
+      if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+      {
+         game->playerPos = editor.cursor;
+      }
+      break;
+   case TOOL_ADD_BLOCK:
+      // Only create blocks while space or left mouse button is held down
+      if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+      {
+         if (FindBlockIndex(&editor, editor.cursor) == -1)
+         {
+            AddBlock(&editor, editor.cursor);
+         }
+      }
+      break;
+   case TOOL_REMOVE_BLOCK:
+      // Only remove blocks while space or left mouse button is held down
+      if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+      {
+         if (FindBlockIndex(&editor, editor.cursor) != -1)
+         {
+            RemoveBlock(&editor, editor.cursor);
+         }
+      }
+      break;
+   case TOOL_EXIT:
+      // Set exit position with space or left mouse button
+      if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+      {
+         game->exitPos = editor.cursor;
+      }
+      break;
+   default:
+      break;
+   }
+
+   // Press Escape to save and return to menu
+   if (IsKeyPressed(KEY_ESCAPE))
+   {
+      SaveLevel(game, &editor);
+      *screen = SCREEN_MENU;
+   }
+}
+
+// Render level editor
+void RenderLevelEditor(const GameState *game)
+{
+   DrawText("LEVEL EDITOR", 20, 20, 32, DARKGRAY);
+   const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit"};
+   DrawText(TextFormat("Tool: %s (Tab to switch)", toolNames[editor.tool]), 20, 60, 18, BLUE);
+
+   // Draw grid
+   for (int x = 0; x <= WINDOW_WIDTH; x += SQUARE_SIZE)
+   {
+      DrawLine(x, 0, x, WINDOW_HEIGHT, LIGHTGRAY);
+   }
+   for (int y = 0; y <= WINDOW_HEIGHT; y += SQUARE_SIZE)
+   {
+      DrawLine(0, y, WINDOW_WIDTH, y, LIGHTGRAY);
+   }
+
+   DrawText("Arrows/Mouse: Move cursor | Space/Left Click: Use tool | 1-4: Tools | ESC: Menu", 20, 85, 18, DARKGRAY);
+   // Draw placed squares
+   for (int i = 0; i < editor.squareCount; i++)
+   {
+      DrawRectangleV(editor.squares[i].pos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GRAY);
+   }
+   // Draw player location as blue square
+   DrawRectangleV(game->playerPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, BLUE);
+   // Draw exit location as green square
+   DrawRectangleV(game->exitPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GREEN);
+   // Draw cursor
+   DrawRectangleLines((int)editor.cursor.x, (int)editor.cursor.y, SQUARE_SIZE, SQUARE_SIZE, RED);
+}
+
+// Update game logic
+void UpdateGame(GameState *game)
+{
+   if (victory)
+      return;
+
+   float dt = GetFrameTime();
+   if (dt > 0.033f)
+      dt = 0.033f; // clamp big frames for stability
+
+   // Decrement timers
+   if (game->coyoteTimer > 0.0f)
+      game->coyoteTimer -= dt;
+   if (game->jumpBufferTimer > 0.0f)
+      game->jumpBufferTimer -= dt;
+
+   // Read input
+   bool wantJumpPress = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP);
+   bool left = IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT);
+   bool right = IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT);
+
+   // Buffer jump on press
+   if (wantJumpPress)
+      game->jumpBufferTimer = JUMP_BUFFER_TIME;
+
+   // Horizontal acceleration
+   float accelX = 0.0f;
+   if (left && !right)
+      accelX = (game->onGround ? -MOVE_ACCEL : -AIR_ACCEL);
+   if (right && !left)
+      accelX = (game->onGround ? MOVE_ACCEL : AIR_ACCEL);
+   game->playerVel.x += accelX * dt;
+
+   // Use buffered jump if allowed by coyote/onGround
+   if ((game->onGround || game->coyoteTimer > 0.0f) && game->jumpBufferTimer > 0.0f)
+   {
+      game->playerVel.y = JUMP_SPEED;
+      game->onGround = false;
+      game->coyoteTimer = 0.0f;
+      game->jumpBufferTimer = 0.0f;
+   }
+
+   // Gravity
+   game->playerVel.y += GRAVITY * dt;
+
+   // Friction
+   if (game->onGround)
+      game->playerVel.x *= GROUND_FRICTION;
+   else
+      game->playerVel.x *= AIR_FRICTION;
+
+   // Clamp speeds
+   if (game->playerVel.x > MAX_SPEED_X)
+      game->playerVel.x = MAX_SPEED_X;
+   if (game->playerVel.x < -MAX_SPEED_X)
+      game->playerVel.x = -MAX_SPEED_X;
+   if (game->playerVel.y > MAX_SPEED_Y)
+      game->playerVel.y = MAX_SPEED_Y;
+   if (game->playerVel.y < -MAX_SPEED_Y)
+      game->playerVel.y = -MAX_SPEED_Y;
+
+   // Move & collide: separate axis resolution
+   float newX = game->playerPos.x;
+   float newY = game->playerPos.y;
+   ResolveAxis(&newX, &game->playerVel.x, newY, PLAYER_W, PLAYER_H, false);
+
+   // Y axis
+   bool wasGround = game->onGround;
+   game->onGround = false;
+   ResolveAxis(&newY, &game->playerVel.y, newX, PLAYER_W, PLAYER_H, true);
+
+   // If vertical velocity got zeroed due to collision while moving down, we are grounded
+   if (game->playerVel.y == 0.0f)
+   {
+      if (AABBOverlapsSolid(newX, newY + 1.0f, PLAYER_W, PLAYER_H))
+         game->onGround = true;
+   }
+
+   // Bounds as solid walls/floor/ceiling
+   if (newX < 0)
+   {
+      newX = 0;
+      game->playerVel.x = 0;
+   }
+   if (newX > WINDOW_WIDTH - PLAYER_W)
+   {
+      newX = WINDOW_WIDTH - PLAYER_W;
+      game->playerVel.x = 0;
+   }
+   if (newY < 0)
+   {
+      newY = 0;
+      game->playerVel.y = 0;
+   }
+   if (newY > WINDOW_HEIGHT - PLAYER_H)
+   {
+      newY = WINDOW_HEIGHT - PLAYER_H;
+      game->playerVel.y = 0;
+      game->onGround = true;
+   }
+
+   game->playerPos.x = newX;
+   game->playerPos.y = newY;
+
+   // Refresh coyote timer when we are on ground; otherwise it keeps ticking down
+   if (game->onGround)
+      game->coyoteTimer = COYOTE_TIME;
+
+   // Victory: if player's AABB overlaps the exit tile
+   Rectangle playerBox = { game->playerPos.x, game->playerPos.y, PLAYER_W, PLAYER_H };
+   Rectangle exitBox   = { game->exitPos.x,   game->exitPos.y,   (float)SQUARE_SIZE, (float)SQUARE_SIZE };
+   if (CheckCollisionRecs(playerBox, exitBox))
+   {
+      victory = true;
+   }
+}
+
+// Render game
+void RenderGame(const GameState *game)
+{
+   // Draw all blocks
+   for (int i = 0; i < editor.squareCount; i++)
+   {
+      DrawRectangleV(editor.squares[i].pos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GRAY);
+   }
+   // Draw player as blue square
+   DrawRectangleV(game->playerPos, (Vector2){PLAYER_W, PLAYER_H}, BLUE);
+   // Draw exit as green square
+   DrawRectangleV(game->exitPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GREEN);
+   // Output actual FPS
+   DrawText(TextFormat("FPS: %d", GetFPS()), 10, 40, 20, RED);
+   DrawText(TextFormat("Vel: (%.0f, %.0f)", game->playerVel.x, game->playerVel.y), 10, 70, 20, DARKGRAY);
+   DrawText(game->onGround ? "Grounded" : "Air", 10, 100, 20, DARKGRAY);
+   DrawText(TextFormat("Coy: %.2f  Buf: %.2f", game->coyoteTimer, game->jumpBufferTimer), 10, 130, 20, DARKGRAY);
+}
+
+int main(void)
+{
+   // Initialize window (width, height, title)
+   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Empty Window");
+   SetExitKey(0); // Disable default Esc-to-close behavior
+
+   // Set the target FPS (optional)
+   SetTargetFPS(100);
+
+   // Initialize game state
+   GameState game = {0};
+   // Offset by one block from left bottom for player and cursor
+   game.playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+   game.playerVel = (Vector2){0, 0};
+   game.onGround = false;
+   game.coyoteTimer = 0.0f;
+   game.jumpBufferTimer = 0.0f;
+   // Offset by one block from right bottom for exit
+   game.exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+
+   // Initialize screen state
+   ScreenState screen = SCREEN_MENU;
+   int menuSelected = 0;
+
+   // Main game loop
+   // Initialize editor cursor to left bottom offset by one block
+   editor.cursor = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+
+   bool editorLoaded = false;
+   bool gameLevelLoaded = false;
+   while (!WindowShouldClose()) // Detect window close button or ESC key
+   {
+      // Update and render based on screen state
+      switch (screen)
+      {
+      case SCREEN_MENU:
+         UpdateMenu(&screen, &menuSelected);
+         BeginDrawing();
+         ClearBackground(RAYWHITE);
+         RenderMenu(menuSelected);
+         EndDrawing();
+         break;
+      case SCREEN_LEVEL_EDITOR:
+      {
+         if (!editorLoaded)
+         {
+            bool loaded = LoadLevel(&game, &editor);
+            if (!loaded)
+            {
+               CreateDefaultLevel(&game, &editor);
+            }
+            editorLoaded = true;
+         }
+         UpdateLevelEditor(&screen, &game);
+         BeginDrawing();
+         ClearBackground(RAYWHITE);
+         RenderLevelEditor(&game);
+         EndDrawing();
+         break;
+      }
+      case SCREEN_GAME_LEVEL:
+      {
+         if (!gameLevelLoaded)
+         {
+            bool loaded = LoadLevel(&game, &editor);
+            if (!loaded)
+            {
+               CreateDefaultLevel(&game, &editor);
+            }
+            gameLevelLoaded = true;
+         }
+         // ESC always returns to main menu while playing
+         if (IsKeyPressed(KEY_ESCAPE))
+         {
+            screen = SCREEN_MENU;
+            break;
+         }
+         UpdateGame(&game);
+         BeginDrawing();
+         ClearBackground(RAYWHITE);
+         RenderGame(&game);
+         EndDrawing();
+
+         // If victory, transition to victory screen
+         if (victory)
+         {
+            screen = SCREEN_VICTORY;
+         }
+         break;
+      }
+      case SCREEN_VICTORY:
+      {
+         BeginDrawing();
+         ClearBackground(RAYWHITE);
+         RenderVictory();
+         EndDrawing();
+         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
+         {
+            screen = SCREEN_MENU;
+         }
+         break;
+      }
+      }
+      // Reset flags when returning to menu
+      if (screen == SCREEN_MENU)
+      {
+         editorLoaded = false;
+         gameLevelLoaded = false;
+         victory = false;
+      }
+   }
+
+   // De-initialize window
+   CloseWindow();
+
+   return 0;
+}
