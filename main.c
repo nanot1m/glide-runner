@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdint.h>
 #ifdef _WIN32
 #include <direct.h> // _mkdir
 #else
@@ -20,6 +21,7 @@ static bool death = false;
 #define MAX_SQUARES 1024
 #define SQUARE_SIZE 20
 #define LEVEL_FILE "levels/level1.txt"
+#define LEVEL_FILE_BIN "levels/level1.lvl"
 
 // Window constants
 #define WINDOW_WIDTH 800
@@ -139,7 +141,6 @@ static void EnsureLevelsDir(void)
 #endif
 }
 
-// Define game state structure
 typedef struct GameState
 {
    int score;
@@ -153,6 +154,10 @@ typedef struct GameState
    float groundStickTimer; // seconds to remain grounded after contact
    // Add more game variables as needed
 } GameState;
+
+// Binary level I/O
+bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed);
+bool LoadLevelBinary(GameState *game, LevelEditorState *ed);
 
 // ---- Grid collision helpers ----
 static inline int WorldToCellX(float x) { return (int)floorf(x / (float)SQUARE_SIZE); }
@@ -336,6 +341,86 @@ static void ResolveAxis(float *pos, float *vel, float other, float w, float h, b
    }
 }
 
+bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed)
+{
+   EnsureLevelsDir();
+   FILE *f = fopen(LEVEL_FILE_BIN, "wb");
+   if (!f)
+      return false;
+
+   // Header
+   const char magic[4] = {'L', 'V', 'L', '1'};
+   const uint8_t version = 1;
+   const uint16_t cols = (uint16_t)GRID_COLS;
+   const uint16_t rows = (uint16_t)GRID_ROWS;
+
+   if (fwrite(magic, 1, 4, f) != 4)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fwrite(&version, 1, 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fwrite(&cols, sizeof(cols), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fwrite(&rows, sizeof(rows), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+
+   // Positions (pixels). Prefer tiles if present to keep in sync with editor grid
+   Vector2 p = game->playerPos, e = game->exitPos;
+   FindTileWorldPos(ed, TILE_PLAYER, &p);
+   FindTileWorldPos(ed, TILE_EXIT, &e);
+   int32_t px = (int32_t)p.x, py = (int32_t)p.y;
+   int32_t ex = (int32_t)e.x, ey = (int32_t)e.y;
+
+   if (fwrite(&px, sizeof(px), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fwrite(&py, sizeof(py), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fwrite(&ex, sizeof(ex), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fwrite(&ey, sizeof(ey), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+
+   // Tiles (row-major)
+   for (int y = 0; y < GRID_ROWS; ++y)
+   {
+      for (int x = 0; x < GRID_COLS; ++x)
+      {
+         uint8_t t = (uint8_t)ed->tiles[y][x];
+         if (fwrite(&t, 1, 1, f) != 1)
+         {
+            fclose(f);
+            return false;
+         }
+      }
+   }
+
+   fclose(f);
+   return true;
+}
+
 void SaveLevel(const GameState *game, const LevelEditorState *ed)
 {
    EnsureLevelsDir();
@@ -360,6 +445,103 @@ void SaveLevel(const GameState *game, const LevelEditorState *ed)
       }
    }
    fclose(f);
+   // Also save binary alongside text
+   (void)SaveLevelBinary(game, ed);
+}
+
+bool LoadLevelBinary(GameState *game, LevelEditorState *ed)
+{
+   FILE *f = fopen(LEVEL_FILE_BIN, "rb");
+   if (!f)
+      return false;
+
+   char magic[4];
+   uint8_t version = 0;
+   uint16_t cols = 0, rows = 0;
+
+   if (fread(magic, 1, 4, f) != 4)
+   {
+      fclose(f);
+      return false;
+   }
+   if (memcmp(magic, "LVL1", 4) != 0)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fread(&version, 1, 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (version != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fread(&cols, sizeof(cols), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fread(&rows, sizeof(rows), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (cols != GRID_COLS || rows != GRID_ROWS)
+   {
+      fclose(f);
+      return false;
+   }
+
+   int32_t px, py, ex, ey;
+   if (fread(&px, sizeof(px), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fread(&py, sizeof(py), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fread(&ex, sizeof(ex), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+   if (fread(&ey, sizeof(ey), 1, f) != 1)
+   {
+      fclose(f);
+      return false;
+   }
+
+   // Clear grid then read tiles
+   for (int y = 0; y < GRID_ROWS; ++y)
+      for (int x = 0; x < GRID_COLS; ++x)
+         ed->tiles[y][x] = TILE_EMPTY;
+
+   for (int y = 0; y < GRID_ROWS; ++y)
+   {
+      for (int x = 0; x < GRID_COLS; ++x)
+      {
+         uint8_t t;
+         if (fread(&t, 1, 1, f) != 1)
+         {
+            fclose(f);
+            return false;
+         }
+         ed->tiles[y][x] = (TileType)t;
+      }
+   }
+
+   fclose(f);
+
+   // Apply positions
+   game->playerPos = (Vector2){(float)px, (float)py};
+   game->exitPos = (Vector2){(float)ex, (float)ey};
+   return true;
 }
 
 bool LoadLevel(GameState *game, LevelEditorState *ed)
@@ -904,7 +1086,9 @@ int main(void)
       {
          if (!editorLoaded)
          {
-            bool loaded = LoadLevel(&game, &editor);
+            bool loaded = LoadLevelBinary(&game, &editor);
+            if (!loaded)
+               loaded = LoadLevel(&game, &editor);
             if (!loaded)
             {
                CreateDefaultLevel(&game, &editor);
@@ -922,7 +1106,9 @@ int main(void)
       {
          if (!gameLevelLoaded)
          {
-            bool loaded = LoadLevel(&game, &editor);
+            bool loaded = LoadLevelBinary(&game, &editor);
+            if (!loaded)
+               loaded = LoadLevel(&game, &editor);
             if (!loaded)
             {
                CreateDefaultLevel(&game, &editor);
