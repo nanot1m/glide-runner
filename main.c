@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdarg.h>
 #ifdef _WIN32
 #include <direct.h> // _mkdir
 #else
@@ -250,7 +251,8 @@ typedef enum
 
 typedef struct GameState
 {
-   int score;
+   int score;            // milliseconds elapsed for the run (lower is better)
+   float runTime;        // seconds elapsed in current run (not serialized)
    Vector2 playerPos;     // top-left corner of player AABB
    Vector2 playerVel;     // px/s
    bool onGround;         // is standing on a block or floor
@@ -482,17 +484,51 @@ static void DrawStats(const GameState *g)
    DrawText(TextFormat("Coy: %.2f  Buf: %.2f", g->coyoteTimer, g->jumpBufferTimer), 10, 130, 20, DARKGRAY);
 }
 
-static void RenderMessageScreen(const char *title, const char *subtitle, Color accent)
+// Render a centered stack of messages. Provide one or more triplets of:
+// (const char* text, Color color, int fontSize), terminated with a NULL text.
+// Example:
+//   RenderMessageScreen("Title", RED, 40,
+//                       "Subtitle", DARKGRAY, 24,
+//                       NULL);
+static void RenderMessageScreen(const char *firstText, Color firstColor, int firstFontSize, ...)
 {
+   if (!firstText)
+      return;
+
+   typedef struct { const char *text; Color color; int size; } Line;
+   Line lines[16];
+   int count = 0;
+
+   lines[count++] = (Line){ firstText, firstColor, firstFontSize };
+
+   va_list ap;
+   va_start(ap, firstFontSize);
+   while (count < (int)(sizeof(lines)/sizeof(lines[0])))
+   {
+      const char *t = va_arg(ap, const char*);
+      if (t == NULL)
+         break;
+      Color c = va_arg(ap, Color);
+      int sz = va_arg(ap, int);
+      lines[count++] = (Line){ t, c, sz };
+   }
+   va_end(ap);
+
+   // Compute total height to vertically center
+   const int spacing = 10;
+   int totalH = 0;
+   for (int i = 0; i < count; ++i)
+      totalH += lines[i].size;
+   if (count > 1) totalH += spacing * (count - 1);
+
    int cx = WINDOW_WIDTH / 2;
-   int cy = WINDOW_HEIGHT / 2;
-   int titleW = MeasureText(title, 40);
-   DrawText(title, cx - titleW / 2, cy - 60, 40, accent);
-   int subW = MeasureText(subtitle, 24);
-   DrawText(subtitle, cx - subW / 2, cy - 10, 24, DARKGRAY);
-   const char *hint = "Press Enter/Space/Esc to return to menu";
-   int hintW = MeasureText(hint, 20);
-   DrawText(hint, cx - hintW / 2, cy + 40, 20, BLUE);
+   int y = WINDOW_HEIGHT / 2 - totalH / 2;
+   for (int i = 0; i < count; ++i)
+   {
+      int w = MeasureText(lines[i].text, lines[i].size);
+      DrawText(lines[i].text, cx - w / 2, y, lines[i].size, lines[i].color);
+      y += lines[i].size + spacing;
+   }
 }
 
 // ---- Tile helpers for grid-based level ----
@@ -1049,14 +1085,25 @@ static void RenderLevelList(const char *title)
 }
 
 // Render victory screen
-void RenderVictory(void)
+void RenderVictory(const GameState *game)
 {
-   RenderMessageScreen("VICTORY!", "You reached the exit.", GREEN);
+   float seconds = (float)game->score / 1000.0f;
+   const char *scoreTxt = TextFormat("Score: %.2f s", seconds);
+   RenderMessageScreen(
+       "VICTORY!", GREEN, 40,
+       "You reached the exit.", DARKGRAY, 24,
+       scoreTxt, BLUE, 28,
+       "Enter: restart | Space/Esc: menu", BLUE, 20,
+       NULL);
 }
 
 void RenderDeath(void)
 {
-   RenderMessageScreen("YOU DIED!", "You touched a laser.", RED);
+   RenderMessageScreen(
+       "YOU DIED!", RED, 40,
+       "You touched a laser.", DARKGRAY, 24,
+       "Enter: restart | Space/Esc: menu", BLUE, 20,
+       NULL);
 }
 
 void FillPerimeter(LevelEditorState *ed)
@@ -1258,6 +1305,8 @@ void UpdateGame(GameState *game)
    float dt = GetFrameTime();
    if (dt > 0.033f)
       dt = 0.033f; // clamp big frames for stability
+   // Accumulate run timer (seconds)
+   game->runTime += dt;
    bool didGroundJumpThisFrame = false;
 
    // Decrement timers
@@ -1444,6 +1493,8 @@ void UpdateGame(GameState *game)
    if (CheckCollisionRecs(PlayerAABB(game), ExitAABB(game)))
    {
       victory = true;
+      // Finalize score as milliseconds elapsed
+      game->score = (int)(game->runTime * 1000.0f);
       if (sfxVictoryLoaded)
          PlaySound(sfxVictory);
    }
@@ -1617,6 +1668,9 @@ int main(void)
                CreateDefaultLevel(&game, &editor);
             }
             gameLevelLoaded = true;
+            // Reset timer/score for a new run
+            game.runTime = 0.0f;
+            game.score = 0;
          }
          // Frame-level input block: still render, skip update/inputs
          if (InputGate_BeginFrameBlocked())
@@ -1673,6 +1727,9 @@ int main(void)
                CreateDefaultLevel(&game, &editor);
             }
             gameLevelLoaded = true;
+            // Reset timer/score for a new run
+            game.runTime = 0.0f;
+            game.score = 0;
          }
          // Frame-level input block: still render, skip update/inputs
          if (InputGate_BeginFrameBlocked())
@@ -1733,7 +1790,7 @@ int main(void)
       {
          BeginDrawing();
          ClearBackground(RAYWHITE);
-         RenderVictory();
+         RenderVictory(&game);
          EndDrawing();
          // Enter: restart current level; Space/Escape: back to menu
          if (IsKeyPressed(KEY_ENTER))
