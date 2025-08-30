@@ -1,0 +1,40 @@
+# Build artifacts
+main
+*.o
+*.obj
+*.out
+*.a
+*.so
+*.dll
+*.dylib
+*.lib
+*.exe
+
+# Debug/profiling outputs
+*.dSYM/
+*.stackdump
+gmon.out
+
+# Logs
+*.log
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.code-workspace
+
+# Caches and temp
+.cache/
+.tmp/
+build/
+dist/
+
+# Optional: ignore generated levels (uncomment if desired)
+# levels/*.lvl
+

@@ -1,15 +1,18 @@
 CC = gcc
-CFLAGS = -I/opt/homebrew/include
+CFLAGS = -I/opt/homebrew/include -std=c99 -Wall -Wextra -Wno-unused-parameter
 LIBS = -L/opt/homebrew/lib -lraylib
+
+SRCS = app.c game.c level.c ui.c audio.c render.c editor.c menu.c input_config.c
+OBJS = $(SRCS:.c=.o)
 
 all: main
 
-main: main.c input_config.c
-	$(CC) main.c input_config.c -o main $(CFLAGS) $(LIBS)
+main: $(OBJS)
+	$(CC) $(OBJS) -o $@ $(CFLAGS) $(LIBS)
 
 clean:
-	rm -f main
+	rm -f main $(OBJS)
 
-.PHONY: build and start
+.PHONY: build start clean
 start: main
 	./main
