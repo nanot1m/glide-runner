@@ -13,4 +13,3 @@ void Audio_PlayDeath(void);
 
 // Menu music control (fade handled inside)
 void Audio_MenuMusicUpdate(bool inMenuScreens, float dt);
-

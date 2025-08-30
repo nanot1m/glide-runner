@@ -1,8 +1,8 @@
 // Rendering helpers shared by game/editor
 #pragma once
-#include "raylib.h"
 #include "game.h"
 #include "level.h"
+#include "raylib.h"
 
 // Laser visual params
 #define LASER_STRIPE_THICKNESS 3.0f
@@ -15,4 +15,3 @@ Rectangle LaserStripeRect(Vector2 laserPos);
 
 void RenderTiles(const LevelEditorState *ed);
 void DrawStats(const GameState *g);
-

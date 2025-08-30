@@ -1,36 +1,36 @@
 // Level grid, editor state, level IO, and catalog
 #pragma once
-#include "raylib.h"
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <math.h>
 #include "config.h"
+#include "raylib.h"
 
 // Paths
 #define LEVEL_FILE_BIN "levels/level1.lvl"
 
 // Tiles/tools
 typedef enum {
-  TILE_EMPTY = 0,
-  TILE_BLOCK = 1,
-  TILE_LASER = 2,
-  TILE_PLAYER = 3,
-  TILE_EXIT = 4
+	TILE_EMPTY = 0,
+	TILE_BLOCK = 1,
+	TILE_LASER = 2,
+	TILE_PLAYER = 3,
+	TILE_EXIT = 4
 } TileType;
 
 typedef enum {
-  TOOL_PLAYER,
-  TOOL_ADD_BLOCK,
-  TOOL_REMOVE_BLOCK,
-  TOOL_EXIT,
-  TOOL_LASER_TRAP,
-  TOOL_COUNT
+	TOOL_PLAYER,
+	TOOL_ADD_BLOCK,
+	TOOL_REMOVE_BLOCK,
+	TOOL_EXIT,
+	TOOL_LASER_TRAP,
+	TOOL_COUNT
 } EditorTool;
 
 typedef struct {
-  Vector2 cursor;
-  TileType tiles[GRID_ROWS][GRID_COLS];
-  EditorTool tool;
+	Vector2 cursor;
+	TileType tiles[GRID_ROWS][GRID_COLS];
+	EditorTool tool;
 } LevelEditorState;
 
 extern LevelEditorState editor;
@@ -39,7 +39,7 @@ extern bool gCreateNewRequested;
 
 // Tile helpers
 static inline bool InBoundsCell(int cx, int cy) {
-  return cx >= 0 && cy >= 0 && cx < GRID_COLS && cy < GRID_ROWS;
+	return cx >= 0 && cy >= 0 && cx < GRID_COLS && cy < GRID_ROWS;
 }
 static inline int WorldToCellX(float x) { return (int)floorf(x / (float)SQUARE_SIZE); }
 static inline int WorldToCellY(float y) { return (int)floorf(y / (float)SQUARE_SIZE); }
@@ -62,14 +62,14 @@ void CreateDefaultLevel(struct GameState *game, LevelEditorState *ed);
 
 // Level catalog
 typedef struct {
-  char baseName[128];
-  char binPath[260];
-  char textPath[260];
+	char baseName[128];
+	char binPath[260];
+	char textPath[260];
 } LevelEntry;
 
 typedef struct {
-  LevelEntry items[256];
-  int count;
+	LevelEntry items[256];
+	int count;
 } LevelCatalog;
 
 void ScanLevels(LevelCatalog *cat);
@@ -78,4 +78,3 @@ void MakeLevelPathFromIndex(int index0, char *out, size_t outSz);
 
 // Utils
 Vector2 SnapToGrid(Vector2 p);
-

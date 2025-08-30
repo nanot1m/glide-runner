@@ -34,4 +34,3 @@
 // Wall interaction
 #define WALL_JUMP_PUSH_X 420.0f
 #define WALL_SLIDE_MAX_FALL 260.0f
-

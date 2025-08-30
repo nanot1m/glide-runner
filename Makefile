@@ -10,9 +10,12 @@ all: main
 main: $(OBJS)
 	$(CC) $(OBJS) -o $@ $(CFLAGS) $(LIBS)
 
+format:
+	git ls-files '*.c' '*.h' | xargs -n 25 clang-format -i
+
 clean:
 	rm -f main $(OBJS)
 
-.PHONY: build start clean
+.PHONY: build start clean format
 start: main
 	./main
