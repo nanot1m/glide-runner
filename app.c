@@ -12,6 +12,16 @@
 #include "screens.h"
 #include "ui.h"
 
+#ifdef PLATFORM_WEB
+#include <emscripten/emscripten.h>
+EM_JS(void, ensure_canvas_focus, (), {
+	if (typeof Module != = 'undefined' && Module.canvas) {
+		Module.canvas.tabIndex = 0;
+		if (document.activeElement != = Module.canvas) Module.canvas.focus();
+	}
+});
+#endif
+
 static const UiListSpec LIST_SPEC = {.startY = 70.0f, .stepY = 30.0f, .itemHeight = 24.0f, .fontSize = 24};
 
 static LevelCatalog gCatalog;
@@ -33,6 +43,8 @@ static inline void RestorePlayerPosFromTile(const LevelEditorState *ed, GameStat
 }
 
 int main(void) {
+	// Request proper scaling on high-DPI displays and enable vsync
+	SetConfigFlags(FLAG_WINDOW_HIGHDPI | FLAG_VSYNC_HINT);
 	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "My C Window");
 	SetAudioStreamBufferSizeDefault(1024);
 	InitAudioDevice();
@@ -41,6 +53,11 @@ int main(void) {
 	InputConfig_Init();
 	SetExitKey(0);
 	SetTargetFPS(120);
+
+#ifdef PLATFORM_WEB
+	// Ensure the Web canvas is focusable and focused so Space/Enter/Escape work
+	ensure_canvas_focus();
+#endif
 
 	GameState game = {0};
 	game.playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
@@ -55,6 +72,10 @@ int main(void) {
 	bool gameLevelLoaded = false;
 
 	while (!WindowShouldClose()) {
+#ifdef PLATFORM_WEB
+		// Keep canvas focused in case focus was lost on transitions
+		ensure_canvas_focus();
+#endif
 		switch (screen) {
 		case SCREEN_MENU:
 			UpdateMenu(&screen, &menuSelected);
@@ -210,36 +231,46 @@ int main(void) {
 		}
 
 		case SCREEN_DEATH: {
+			// Handle input before drawing on web to avoid frame-edge loss
+			if (!InputGate_BeginFrameBlocked()) {
+				if (InputPressed(ACT_ACTIVATE)) {
+					InputGate_RequestBlockOnce();
+					Game_ClearOutcome();
+					gameLevelLoaded = false;
+					screen = SCREEN_GAME_LEVEL;
+					break;
+				} else if (InputPressed(ACT_BACK)) {
+					InputGate_RequestBlockOnce();
+					screen = SCREEN_MENU;
+					break;
+				}
+			}
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderDeath();
 			EndDrawing();
-			if (InputPressed(ACT_ACTIVATE)) {
-				InputGate_RequestBlockOnce();
-				Game_ClearOutcome();
-				gameLevelLoaded = false;
-				screen = SCREEN_GAME_LEVEL;
-			} else if (InputPressed(ACT_BACK)) {
-				InputGate_RequestBlockOnce();
-				screen = SCREEN_MENU;
-			}
 			break;
 		}
 
 		case SCREEN_VICTORY: {
+			// Handle input before drawing on web to avoid frame-edge loss
+			if (!InputGate_BeginFrameBlocked()) {
+				if (InputPressed(ACT_ACTIVATE)) {
+					InputGate_RequestBlockOnce();
+					Game_ClearOutcome();
+					gameLevelLoaded = false;
+					screen = SCREEN_GAME_LEVEL;
+					break;
+				} else if (InputPressed(ACT_BACK)) {
+					InputGate_RequestBlockOnce();
+					screen = SCREEN_MENU;
+					break;
+				}
+			}
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderVictory(&game);
 			EndDrawing();
-			if (InputPressed(ACT_ACTIVATE)) {
-				InputGate_RequestBlockOnce();
-				Game_ClearOutcome();
-				gameLevelLoaded = false;
-				screen = SCREEN_GAME_LEVEL;
-			} else if (InputPressed(ACT_BACK)) {
-				InputGate_RequestBlockOnce();
-				screen = SCREEN_MENU;
-			}
 			break;
 		}
 		}

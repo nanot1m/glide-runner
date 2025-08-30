@@ -247,8 +247,8 @@ void ScanLevels(LevelCatalog *cat) {
 	if (d) {
 		struct dirent *ent;
 		while ((ent = readdir(d)) != NULL) {
-			if (ent->d_type == DT_DIR) continue;
 			const char *name = ent->d_name;
+			if (!name || name[0] == '.') continue; // skip hidden, "." and ".."
 			size_t len = strlen(name);
 			if (len > 4 && strcmp(name + len - 4, ".lvl") == 0) {
 				LevelEntry *e = &cat->items[cat->count++];

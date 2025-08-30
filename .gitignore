@@ -34,7 +34,14 @@ ehthumbs.db
 .tmp/
 build/
 dist/
+web/
+
+# raylib submodule build outputs (kept inside submodule)
+# Note: .gitignore does not apply inside submodules; this is informational.
+vendor/raylib/src/*.o
+vendor/raylib/src/libraylib*.a
+vendor/raylib/src/*.so*
+vendor/raylib/src/raygui.c
 
 # Optional: ignore generated levels (uncomment if desired)
 # levels/*.lvl
-

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My C Window</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #111; }
+      body { display: flex; align-items: center; justify-content: center; }
+      #canvas { display: block; outline: none; image-rendering: pixelated; }
+    </style>
+  </head>
+  <body>
+    <!-- Set base game resolution to preserve the game's aspect ratio (sync with config.h) -->
+    <canvas id="canvas" width="800" height="600" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
+    <script>
+      // Minimal Emscripten Module config without built-in UI
+      var Module = {
+        preRun: [],
+        postRun: [],
+        print: function(text){ console.log(text); },
+        printErr: function(text){ console.error(text); },
+        canvas: (function(){ return document.getElementById('canvas'); })(),
+        setStatus: function(text) {},
+        monitorRunDependencies: function(left) {},
+      };
+
+      // Keep canvas aspect ratio (fit within viewport, letterbox)
+      (function(){
+        var baseW = 0, baseH = 0;
+        function ensureBase() {
+          if (!baseW || !baseH) {
+            var c = Module.canvas;
+            baseW = c && c.width ? c.width : 800;
+            baseH = c && c.height ? c.height : 600;
+          }
+        }
+        function resizeCanvas() {
+          ensureBase();
+          var ww = window.innerWidth || document.documentElement.clientWidth || 800;
+          var wh = window.innerHeight || document.documentElement.clientHeight || 600;
+          var scale = Math.min(ww / baseW, wh / baseH);
+          var w = Math.max(1, Math.floor(baseW * scale));
+          var h = Math.max(1, Math.floor(baseH * scale));
+          var c = Module.canvas;
+          if (!c) return;
+          c.style.width = w + 'px';
+          c.style.height = h + 'px';
+        }
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', resizeCanvas);
+        document.addEventListener('DOMContentLoaded', resizeCanvas);
+        Module.postRun.push(resizeCanvas);
+      })();
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+  </html>
