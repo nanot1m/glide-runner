@@ -4,8 +4,8 @@ LIBS = -L/opt/homebrew/lib -lraylib
 
 all: main
 
-main: main.c
-	$(CC) main.c -o main $(CFLAGS) $(LIBS)
+main: main.c input_config.c
+	$(CC) main.c input_config.c -o main $(CFLAGS) $(LIBS)
 
 clean:
 	rm -f main

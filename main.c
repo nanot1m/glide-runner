@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "input_config.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
@@ -874,18 +875,16 @@ static int UiListIndexAtMouse(Vector2 m, const UiListSpec *spec, int itemCount)
 // should only happen if the cursor is over a list item (handled in UiListHandle).
 static inline bool UiListIsKeyActivatePressed(void)
 {
-   return IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
+   return InputPressed(ACT_ACTIVATE);
 }
 
 // Any input relevant anywhere (menu, editor, gameplay)
 static bool AnyInputDown(void)
 {
    bool anyKeyHeld =
-       IsKeyDown(KEY_ENTER) || IsKeyDown(KEY_SPACE) || IsKeyDown(KEY_ESCAPE) ||
-       IsKeyDown(KEY_UP) || IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT) ||
-       IsKeyDown(KEY_W) || IsKeyDown(KEY_A) || IsKeyDown(KEY_S) || IsKeyDown(KEY_D) ||
-       IsKeyDown(KEY_TAB) ||
-       IsKeyDown(KEY_ONE) || IsKeyDown(KEY_TWO) || IsKeyDown(KEY_THREE) || IsKeyDown(KEY_FOUR) || IsKeyDown(KEY_FIVE);
+       InputDown(ACT_ACTIVATE) || InputDown(ACT_BACK) ||
+       InputDown(ACT_NAV_UP) || InputDown(ACT_NAV_DOWN) || InputDown(ACT_NAV_LEFT) || InputDown(ACT_NAV_RIGHT) ||
+       InputDown(ACT_LEFT) || InputDown(ACT_RIGHT) || InputDown(ACT_DOWN);
    bool anyMouseHeld = IsMouseButtonDown(MOUSE_LEFT_BUTTON) ||
                        IsMouseButtonDown(MOUSE_RIGHT_BUTTON) ||
                        IsMouseButtonDown(MOUSE_MIDDLE_BUTTON);
@@ -931,11 +930,11 @@ static void UiListHandle(const UiListSpec *spec, int *selected, int itemCount, b
       return;
    }
 
-   // arrows + WASD cyclic navigation (edge-only)
-   bool pressDown = IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S);
-   bool pressUp = IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
-   bool pressLeft = IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A);
-   bool pressRight = IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D);
+   // arrows + WASD (configurable) cyclic navigation (edge-only)
+   bool pressDown = InputPressed(ACT_NAV_DOWN);
+   bool pressUp = InputPressed(ACT_NAV_UP);
+   bool pressLeft = InputPressed(ACT_NAV_LEFT);
+   bool pressRight = InputPressed(ACT_NAV_RIGHT);
 
    if (pressDown)
    {
@@ -1256,7 +1255,7 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
    }
 
    // Press Escape to save and return to menu
-   if (IsKeyPressed(KEY_ESCAPE))
+   if (InputPressed(ACT_BACK))
    {
       SaveLevelBinary(game, &editor);
       InputGate_RequestBlockOnce();
@@ -1264,7 +1263,7 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
    }
 
    // Quick test: save and run the level when Enter is pressed
-   if (IsKeyPressed(KEY_ENTER))
+   if (InputPressed(ACT_ACTIVATE))
    {
       SaveLevelBinary(game, &editor);
       victory = false;
@@ -1322,10 +1321,10 @@ void UpdateGame(GameState *game)
       game->groundStickTimer -= dt;
 
    // Read input
-   bool wantJumpPress = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP);
-   bool left = IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT);
-   bool right = IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT);
-   bool down = IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN);
+   bool wantJumpPress = InputPressed(ACT_JUMP);
+   bool left = InputDown(ACT_LEFT);
+   bool right = InputDown(ACT_RIGHT);
+   bool down = InputDown(ACT_DOWN);
 
    // --- CROUCH state & AABB height management ---
    // Keep player feet anchored (playerPos stores top-left)
@@ -1542,6 +1541,7 @@ int main(void)
    LoadAllSfx();
    PrimeSfxWarmup();
    LoadMenuMusic();
+   InputConfig_Init();
    SetExitKey(0); // Disable default Esc-to-close behavior
    SetTargetFPS(120);
 
@@ -1579,7 +1579,7 @@ int main(void)
       case SCREEN_SELECT_EDIT:
       {
          ScanLevels(&gCatalog);
-         if (IsKeyPressed(KEY_ESCAPE))
+         if (InputPressed(ACT_BACK))
          {
             InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
@@ -1609,7 +1609,7 @@ int main(void)
       case SCREEN_SELECT_PLAY:
       {
          ScanLevels(&gCatalog);
-         if (IsKeyPressed(KEY_ESCAPE))
+         if (InputPressed(ACT_BACK))
          {
             InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
@@ -1790,8 +1790,8 @@ int main(void)
          ClearBackground(RAYWHITE);
          RenderDeath();
          EndDrawing();
-         // Enter: restart current level; Space/Escape: back to menu
-         if (IsKeyPressed(KEY_ENTER))
+         // Enter (activate): restart current level; Back goes to menu
+         if (InputPressed(ACT_ACTIVATE))
          {
             InputGate_RequestBlockOnce();
             victory = false;
@@ -1799,7 +1799,7 @@ int main(void)
             gameLevelLoaded = false; // force reload of the level data
             screen = SCREEN_GAME_LEVEL;
          }
-         else if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
+         else if (InputPressed(ACT_BACK))
          {
             InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
@@ -1813,8 +1813,8 @@ int main(void)
          ClearBackground(RAYWHITE);
          RenderVictory(&game);
          EndDrawing();
-         // Enter: restart current level; Space/Escape: back to menu
-         if (IsKeyPressed(KEY_ENTER))
+         // Enter (activate): restart current level; Back goes to menu
+         if (InputPressed(ACT_ACTIVATE))
          {
             InputGate_RequestBlockOnce();
             victory = false;
@@ -1822,7 +1822,7 @@ int main(void)
             gameLevelLoaded = false; // force reload of the level data
             screen = SCREEN_GAME_LEVEL;
          }
-         else if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
+         else if (InputPressed(ACT_BACK))
          {
             InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
