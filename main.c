@@ -1712,7 +1712,16 @@ int main(void)
          ClearBackground(RAYWHITE);
          RenderDeath();
          EndDrawing();
-         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
+         // Enter: restart current level; Space/Escape: back to menu
+         if (IsKeyPressed(KEY_ENTER))
+         {
+            InputGate_RequestBlockOnce();
+            victory = false;
+            death = false;
+            gameLevelLoaded = false; // force reload of the level data
+            screen = SCREEN_GAME_LEVEL;
+         }
+         else if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
          {
             InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
@@ -1726,7 +1735,16 @@ int main(void)
          ClearBackground(RAYWHITE);
          RenderVictory();
          EndDrawing();
-         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
+         // Enter: restart current level; Space/Escape: back to menu
+         if (IsKeyPressed(KEY_ENTER))
+         {
+            InputGate_RequestBlockOnce();
+            victory = false;
+            death = false;
+            gameLevelLoaded = false; // force reload of the level data
+            screen = SCREEN_GAME_LEVEL;
+         }
+         else if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
          {
             InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
