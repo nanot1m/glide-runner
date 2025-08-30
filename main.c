@@ -25,6 +25,10 @@ static bool death = false;
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 
+// Grid derived from window size and tile size
+#define GRID_COLS (WINDOW_WIDTH / SQUARE_SIZE)
+#define GRID_ROWS (WINDOW_HEIGHT / SQUARE_SIZE)
+
 // --- Physics tuning (feel free to tweak) ---
 #define GRAVITY 1800.0f        // px/s^2
 #define MOVE_ACCEL 7000.0f     // px/s^2
@@ -87,11 +91,6 @@ typedef enum
    MENU_GAME_LEVEL
 } MenuOption;
 
-typedef struct
-{
-   Vector2 pos;
-} EditorSquare;
-
 typedef enum
 {
    TOOL_PLAYER,
@@ -102,13 +101,19 @@ typedef enum
    TOOL_COUNT
 } EditorTool;
 
+typedef enum
+{
+   TILE_EMPTY = 0,
+   TILE_BLOCK = 1,
+   TILE_LASER = 2,
+   TILE_PLAYER = 3,
+   TILE_EXIT = 4
+} TileType;
+
 typedef struct
 {
    Vector2 cursor;
-   EditorSquare squares[MAX_SQUARES];
-   int squareCount;
-   EditorSquare lasers[MAX_SQUARES];
-   int laserCount;
+   TileType tiles[GRID_ROWS][GRID_COLS];
    EditorTool tool;
 } LevelEditorState;
 
@@ -149,93 +154,121 @@ typedef struct GameState
    // Add more game variables as needed
 } GameState;
 
-// ----------------------
-// Rendering & AABB helpers
-// ----------------------
-static inline float PlayerCurrentHeight(const GameState *g)
-{
-    return g->crouching ? PLAYER_H_CROUCH : PLAYER_H;
-}
-
-static inline Rectangle PlayerAABB(const GameState *g)
-{
-    float h = PlayerCurrentHeight(g);
-    return (Rectangle){ g->playerPos.x, g->playerPos.y, PLAYER_W, h };
-}
-
-static inline Rectangle ExitAABB(const GameState *g)
-{
-    return (Rectangle){ g->exitPos.x, g->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE };
-}
-
-static inline Rectangle LaserStripeRect(Vector2 laserPos)
-{
-    return (Rectangle){ laserPos.x, laserPos.y + 1.0f, (float)SQUARE_SIZE, 3.0f };
-}
-
-// Draw all solid tiles (blocks) and laser stripes used by both editor and game
-static void RenderTiles(const LevelEditorState *ed)
-{
-    for (int i = 0; i < ed->squareCount; ++i)
-    {
-        DrawRectangleV(ed->squares[i].pos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GRAY);
-    }
-    for (int i = 0; i < ed->laserCount; ++i)
-    {
-        Rectangle lr = LaserStripeRect(ed->lasers[i].pos);
-        DrawRectangleRec(lr, RED);
-    }
-}
-
-static void DrawStats(const GameState *g)
-{
-    DrawText(TextFormat("FPS: %d", GetFPS()), 10, 40, 20, RED);
-    DrawText(TextFormat("Vel: (%.0f, %.0f)", g->playerVel.x, g->playerVel.y), 10, 70, 20, DARKGRAY);
-    DrawText(g->onGround ? "Grounded" : "Air", 10, 100, 20, DARKGRAY);
-    DrawText(TextFormat("Coy: %.2f  Buf: %.2f", g->coyoteTimer, g->jumpBufferTimer), 10, 130, 20, DARKGRAY);
-}
-
-static void RenderMessageScreen(const char *title, const char *subtitle, Color accent)
-{
-    int cx = WINDOW_WIDTH / 2;
-    int cy = WINDOW_HEIGHT / 2;
-    int titleW = MeasureText(title, 40);
-    DrawText(title, cx - titleW / 2, cy - 60, 40, accent);
-    int subW = MeasureText(subtitle, 24);
-    DrawText(subtitle, cx - subW / 2, cy - 10, 24, DARKGRAY);
-    const char *hint = "Press Enter/Space/Esc to return to menu";
-    int hintW = MeasureText(hint, 20);
-    DrawText(hint, cx - hintW / 2, cy + 40, 20, BLUE);
-}
-
 // ---- Grid collision helpers ----
 static inline int WorldToCellX(float x) { return (int)floorf(x / (float)SQUARE_SIZE); }
 static inline int WorldToCellY(float y) { return (int)floorf(y / (float)SQUARE_SIZE); }
 static inline float CellToWorld(int c) { return (float)(c * SQUARE_SIZE); }
 
-// Helper: check if block exists at position
-int FindBlockIndex(const LevelEditorState *ed, Vector2 pos)
+// ----------------------
+// Rendering & AABB helpers
+// ----------------------
+static inline float PlayerCurrentHeight(const GameState *g)
 {
-   for (int i = 0; i < ed->squareCount; i++)
-   {
-      if (ed->squares[i].pos.x == pos.x && ed->squares[i].pos.y == pos.y)
-      {
-         return i;
-      }
-   }
-   return -1;
+   return g->crouching ? PLAYER_H_CROUCH : PLAYER_H;
 }
 
+static inline Rectangle PlayerAABB(const GameState *g)
+{
+   float h = PlayerCurrentHeight(g);
+   return (Rectangle){g->playerPos.x, g->playerPos.y, PLAYER_W, h};
+}
+
+static inline Rectangle ExitAABB(const GameState *g)
+{
+   return (Rectangle){g->exitPos.x, g->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE};
+}
+
+static inline Rectangle LaserStripeRect(Vector2 laserPos)
+{
+   return (Rectangle){laserPos.x, laserPos.y + 1.0f, (float)SQUARE_SIZE, 3.0f};
+}
+
+// Draw all solid tiles (blocks) and laser stripes used by both editor and game
+static void RenderTiles(const LevelEditorState *ed)
+{
+   for (int y = 0; y < GRID_ROWS; ++y)
+   {
+      for (int x = 0; x < GRID_COLS; ++x)
+      {
+         TileType t = ed->tiles[y][x];
+         if (t == TILE_BLOCK)
+         {
+            DrawRectangle(CellToWorld(x), CellToWorld(y), SQUARE_SIZE, SQUARE_SIZE, GRAY);
+         }
+         else if (t == TILE_LASER)
+         {
+            Rectangle lr = (Rectangle){CellToWorld(x), CellToWorld(y) + 1.0f, (float)SQUARE_SIZE, 3.0f};
+            DrawRectangleRec(lr, RED);
+         }
+      }
+   }
+}
+
+static void DrawStats(const GameState *g)
+{
+   DrawText(TextFormat("FPS: %d", GetFPS()), 10, 40, 20, RED);
+   DrawText(TextFormat("Vel: (%.0f, %.0f)", g->playerVel.x, g->playerVel.y), 10, 70, 20, DARKGRAY);
+   DrawText(g->onGround ? "Grounded" : "Air", 10, 100, 20, DARKGRAY);
+   DrawText(TextFormat("Coy: %.2f  Buf: %.2f", g->coyoteTimer, g->jumpBufferTimer), 10, 130, 20, DARKGRAY);
+}
+
+static void RenderMessageScreen(const char *title, const char *subtitle, Color accent)
+{
+   int cx = WINDOW_WIDTH / 2;
+   int cy = WINDOW_HEIGHT / 2;
+   int titleW = MeasureText(title, 40);
+   DrawText(title, cx - titleW / 2, cy - 60, 40, accent);
+   int subW = MeasureText(subtitle, 24);
+   DrawText(subtitle, cx - subW / 2, cy - 10, 24, DARKGRAY);
+   const char *hint = "Press Enter/Space/Esc to return to menu";
+   int hintW = MeasureText(hint, 20);
+   DrawText(hint, cx - hintW / 2, cy + 40, 20, BLUE);
+}
+
+// ---- Tile helpers for grid-based level ----
+static inline bool InBoundsCell(int cx, int cy)
+{
+   return cx >= 0 && cy >= 0 && cx < GRID_COLS && cy < GRID_ROWS;
+}
+static inline TileType GetTile(const LevelEditorState *ed, int cx, int cy)
+{
+   if (!InBoundsCell(cx, cy))
+      return TILE_BLOCK; // out of bounds is solid
+   return ed->tiles[cy][cx];
+}
+static inline void SetTile(LevelEditorState *ed, int cx, int cy, TileType v)
+{
+   if (!InBoundsCell(cx, cy))
+      return;
+   ed->tiles[cy][cx] = v;
+}
+static void SetUniqueTile(LevelEditorState *ed, int cx, int cy, TileType v)
+{
+   for (int y = 0; y < GRID_ROWS; ++y)
+      for (int x = 0; x < GRID_COLS; ++x)
+         if (ed->tiles[y][x] == v)
+            ed->tiles[y][x] = TILE_EMPTY;
+   SetTile(ed, cx, cy, v);
+}
+static bool FindTileWorldPos(const LevelEditorState *ed, TileType v, Vector2 *out)
+{
+   for (int y = 0; y < GRID_ROWS; ++y)
+      for (int x = 0; x < GRID_COLS; ++x)
+         if (ed->tiles[y][x] == v)
+         {
+            *out = (Vector2){CellToWorld(x), CellToWorld(y)};
+            return true;
+         }
+   return false;
+}
+
+// ---- Grid collision helpers ----
 static bool BlockAtCell(int cx, int cy)
 {
-   if (cx < 0 || cy < 0)
-      return true; // treat outside as solid
-   if (CellToWorld(cx) > WINDOW_WIDTH - SQUARE_SIZE)
+   // Treat out of bounds as solid
+   if (!InBoundsCell(cx, cy))
       return true;
-   if (CellToWorld(cy) > WINDOW_HEIGHT - SQUARE_SIZE)
-      return true;
-   Vector2 tilePos = {CellToWorld(cx), CellToWorld(cy)};
-   return FindBlockIndex(&editor, tilePos) != -1;
+   return editor.tiles[cy][cx] == TILE_BLOCK; // only blocks are solid
 }
 
 // Check if any grid cell overlapped by an AABB is solid
@@ -303,59 +336,65 @@ static void ResolveAxis(float *pos, float *vel, float other, float w, float h, b
    }
 }
 
-// Save level to file
-void SaveLevel(const GameState *game, const LevelEditorState *editor)
+void SaveLevel(const GameState *game, const LevelEditorState *ed)
 {
    EnsureLevelsDir();
    FILE *f = fopen(LEVEL_FILE, "w");
    if (!f)
       return;
-   // Save player position
-   fprintf(f, "PLAYER %d %d\n", (int)game->playerPos.x, (int)game->playerPos.y);
-   // Save exit position
-   fprintf(f, "EXIT %d %d\n", (int)game->exitPos.x, (int)game->exitPos.y);
-   // Save blocks
-   for (int i = 0; i < editor->squareCount; i++)
+   // Player/Exit: derive from grid if present, otherwise from game state
+   Vector2 p = game->playerPos, e = game->exitPos;
+   FindTileWorldPos(ed, TILE_PLAYER, &p);
+   FindTileWorldPos(ed, TILE_EXIT, &e);
+   fprintf(f, "PLAYER %d %d\n", (int)p.x, (int)p.y);
+   fprintf(f, "EXIT %d %d\n", (int)e.x, (int)e.y);
+   for (int y = 0; y < GRID_ROWS; ++y)
    {
-      fprintf(f, "BLOCK %d %d\n", (int)editor->squares[i].pos.x, (int)editor->squares[i].pos.y);
-   }
-   // Save lasers
-   for (int i = 0; i < editor->laserCount; i++)
-   {
-      fprintf(f, "LASER %d %d\n", (int)editor->lasers[i].pos.x, (int)editor->lasers[i].pos.y);
+      for (int x = 0; x < GRID_COLS; ++x)
+      {
+         TileType t = ed->tiles[y][x];
+         if (t == TILE_BLOCK)
+            fprintf(f, "BLOCK %d %d\n", (int)CellToWorld(x), (int)CellToWorld(y));
+         else if (t == TILE_LASER)
+            fprintf(f, "LASER %d %d\n", (int)CellToWorld(x), (int)CellToWorld(y));
+      }
    }
    fclose(f);
 }
 
-// Load level from file
-bool LoadLevel(GameState *game, LevelEditorState *editor)
+bool LoadLevel(GameState *game, LevelEditorState *ed)
 {
    FILE *f = fopen(LEVEL_FILE, "r");
    if (!f)
       return false;
+   // clear grid
+   for (int y = 0; y < GRID_ROWS; ++y)
+      for (int x = 0; x < GRID_COLS; ++x)
+         ed->tiles[y][x] = TILE_EMPTY;
    char type[16];
    int x, y;
-   editor->squareCount = 0;
-   editor->laserCount = 0;
+   Vector2 tmp;
    while (fscanf(f, "%15s %d %d", type, &x, &y) == 3)
    {
+      int cx = WorldToCellX((float)x);
+      int cy = WorldToCellY((float)y);
       if (strcmp(type, "PLAYER") == 0)
       {
+         SetUniqueTile(ed, cx, cy, TILE_PLAYER);
          game->playerPos = (Vector2){x, y};
       }
       else if (strcmp(type, "EXIT") == 0)
       {
+         SetUniqueTile(ed, cx, cy, TILE_EXIT);
          game->exitPos = (Vector2){x, y};
       }
-      else if (strcmp(type, "BLOCK") == 0 && editor->squareCount < MAX_SQUARES)
+      else if (strcmp(type, "BLOCK") == 0)
       {
-         editor->squares[editor->squareCount].pos = (Vector2){x, y};
-         editor->squareCount++;
+         SetTile(ed, cx, cy, TILE_BLOCK);
       }
-      else if (strcmp(type, "LASER") == 0 && editor->laserCount < MAX_SQUARES)
+      else if (strcmp(type, "LASER") == 0)
       {
-         editor->lasers[editor->laserCount].pos = (Vector2){x, y};
-         editor->laserCount++;
+         SetTile(ed, cx, cy, TILE_LASER);
       }
    }
    fclose(f);
@@ -406,99 +445,44 @@ void RenderMenu(int selected)
 // Render victory screen
 void RenderVictory(void)
 {
-    RenderMessageScreen("VICTORY!", "You reached the exit.", GREEN);
+   RenderMessageScreen("VICTORY!", "You reached the exit.", GREEN);
 }
 
 void RenderDeath(void)
 {
-    RenderMessageScreen("YOU DIED!", "You touched a laser.", RED);
+   RenderMessageScreen("YOU DIED!", "You touched a laser.", RED);
 }
 
-// Helper: add block if not exists
-void AddBlock(LevelEditorState *ed, Vector2 pos)
-{
-   if (ed->squareCount < MAX_SQUARES && FindBlockIndex(ed, pos) == -1)
-   {
-      ed->squares[ed->squareCount].pos = pos;
-      ed->squareCount++;
-   }
-}
-
-int FindLaserIndex(LevelEditorState *ed, Vector2 pos)
-{
-   for (int i = 0; i < ed->laserCount; ++i)
-   {
-      if (ed->lasers[i].pos.x == pos.x && ed->lasers[i].pos.y == pos.y)
-      {
-         return i;
-      }
-   }
-   return -1;
-}
-
-void AddLaser(LevelEditorState *ed, Vector2 pos)
-{
-   if (ed->laserCount < MAX_SQUARES && FindLaserIndex(ed, pos) == -1)
-   {
-      ed->lasers[ed->laserCount].pos = pos;
-      ed->laserCount++;
-   }
-}
-
-void RemoveLaser(LevelEditorState *ed, Vector2 pos)
-{
-   int idx = FindLaserIndex(ed, pos);
-   if (idx != -1)
-   {
-      for (int i = idx; i < ed->laserCount - 1; i++)
-      {
-         ed->lasers[i] = ed->lasers[i + 1];
-      }
-      ed->laserCount--;
-   }
-}
-
-// Helper: remove block if exists
-void RemoveBlock(LevelEditorState *ed, Vector2 pos)
-{
-   int idx = FindBlockIndex(ed, pos);
-   if (idx != -1)
-   {
-      for (int i = idx; i < ed->squareCount - 1; i++)
-      {
-         ed->squares[i] = ed->squares[i + 1];
-      }
-      ed->squareCount--;
-   }
-}
-
-// Fill perimeter with blocks
 void FillPerimeter(LevelEditorState *ed)
 {
-   for (int x = 0; x < WINDOW_WIDTH; x += SQUARE_SIZE)
+   for (int x = 0; x < GRID_COLS; ++x)
    {
-      AddBlock(ed, (Vector2){x, 0});
-      AddBlock(ed, (Vector2){x, WINDOW_HEIGHT - SQUARE_SIZE});
+      SetTile(ed, x, 0, TILE_BLOCK);
+      SetTile(ed, x, GRID_ROWS - 1, TILE_BLOCK);
    }
-   for (int y = SQUARE_SIZE; y < WINDOW_HEIGHT - SQUARE_SIZE; y += SQUARE_SIZE)
+   for (int y = 1; y < GRID_ROWS - 1; ++y)
    {
-      AddBlock(ed, (Vector2){0, y});
-      AddBlock(ed, (Vector2){WINDOW_WIDTH - SQUARE_SIZE, y});
+      SetTile(ed, 0, y, TILE_BLOCK);
+      SetTile(ed, GRID_COLS - 1, y, TILE_BLOCK);
    }
 }
 
-// Create default level
-void CreateDefaultLevel(GameState *game, LevelEditorState *editor)
+void CreateDefaultLevel(GameState *game, LevelEditorState *ed)
 {
-   game->playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
-   game->exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+   // clear grid
+   for (int y = 0; y < GRID_ROWS; ++y)
+      for (int x = 0; x < GRID_COLS; ++x)
+         ed->tiles[y][x] = TILE_EMPTY;
+   FillPerimeter(ed);
+   Vector2 p = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+   Vector2 e = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+   SetUniqueTile(ed, WorldToCellX(p.x), WorldToCellY(p.y), TILE_PLAYER);
+   SetUniqueTile(ed, WorldToCellX(e.x), WorldToCellY(e.y), TILE_EXIT);
+   game->playerPos = p;
+   game->exitPos = e;
    game->groundStickTimer = 0.0f;
-   editor->squareCount = 0;
-   editor->laserCount = 0;
-   FillPerimeter(editor);
 }
 
-// Update level editor logic
 void UpdateLevelEditor(ScreenState *screen, GameState *game)
 {
    // Switch tool with Tab
@@ -568,50 +552,44 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
    switch (editor.tool)
    {
    case TOOL_PLAYER:
-      // Set player position with space or left mouse button
       if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
       {
-         game->playerPos = editor.cursor;
+         int cx = WorldToCellX(editor.cursor.x), cy = WorldToCellY(editor.cursor.y);
+         SetUniqueTile(&editor, cx, cy, TILE_PLAYER);
+         game->playerPos = (Vector2){CellToWorld(cx), CellToWorld(cy)};
       }
       break;
    case TOOL_ADD_BLOCK:
-      // Only create blocks while space or left mouse button is held down
       if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
       {
-         if (FindBlockIndex(&editor, editor.cursor) == -1)
-         {
-            AddBlock(&editor, editor.cursor);
-         }
+         int cx = WorldToCellX(editor.cursor.x), cy = WorldToCellY(editor.cursor.y);
+         if (GetTile(&editor, cx, cy) != TILE_PLAYER && GetTile(&editor, cx, cy) != TILE_EXIT)
+            SetTile(&editor, cx, cy, TILE_BLOCK);
       }
       break;
    case TOOL_REMOVE_BLOCK:
-      // Only remove blocks while space or left mouse button is held down
       if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
       {
-         if (FindBlockIndex(&editor, editor.cursor) != -1)
-         {
-            RemoveBlock(&editor, editor.cursor);
-         }
-         if (FindLaserIndex(&editor, editor.cursor) != -1)
-         {
-            RemoveLaser(&editor, editor.cursor);
-         }
+         int cx = WorldToCellX(editor.cursor.x), cy = WorldToCellY(editor.cursor.y);
+         TileType t = GetTile(&editor, cx, cy);
+         if (t == TILE_BLOCK || t == TILE_LASER)
+            SetTile(&editor, cx, cy, TILE_EMPTY);
       }
       break;
    case TOOL_EXIT:
-      // Set exit position with space or left mouse button
       if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
       {
-         game->exitPos = editor.cursor;
+         int cx = WorldToCellX(editor.cursor.x), cy = WorldToCellY(editor.cursor.y);
+         SetUniqueTile(&editor, cx, cy, TILE_EXIT);
+         game->exitPos = (Vector2){CellToWorld(cx), CellToWorld(cy)};
       }
       break;
    case TOOL_LASER_TRAP:
       if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
       {
-         if (FindLaserIndex(&editor, editor.cursor) == -1)
-         {
-            AddLaser(&editor, editor.cursor);
-         }
+         int cx = WorldToCellX(editor.cursor.x), cy = WorldToCellY(editor.cursor.y);
+         if (GetTile(&editor, cx, cy) == TILE_EMPTY)
+            SetTile(&editor, cx, cy, TILE_LASER);
       }
       break;
    default:
@@ -640,7 +618,7 @@ void RenderLevelEditor(const GameState *game)
    }
    RenderTiles(&editor);
    DrawRectangleRec((Rectangle){game->playerPos.x, game->playerPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE}, BLUE);
-   DrawRectangleRec((Rectangle){game->exitPos.x,   game->exitPos.y,   (float)SQUARE_SIZE, (float)SQUARE_SIZE}, GREEN);
+   DrawRectangleRec((Rectangle){game->exitPos.x, game->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE}, GREEN);
 
    DrawText("LEVEL EDITOR", 20, 20, 32, DARKGRAY);
    const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit", "Laser Trap"};
@@ -839,35 +817,44 @@ void UpdateGame(GameState *game)
    // Victory: if player's AABB overlaps the exit tile
    if (CheckCollisionRecs(PlayerAABB(game), ExitAABB(game)))
    {
-       victory = true;
+      victory = true;
    }
 
    // Death: if player's AABB overlaps any laser trap stripe
    {
-       Rectangle pb = PlayerAABB(game);
-       for (int i = 0; i < editor.laserCount; ++i)
-       {
-           if (CheckCollisionRecs(pb, LaserStripeRect(editor.lasers[i].pos)))
-           {
-               death = true;
-               break;
-           }
-       }
+      Rectangle pb = PlayerAABB(game);
+      for (int y = 0; y < GRID_ROWS; ++y)
+      {
+         for (int x = 0; x < GRID_COLS; ++x)
+         {
+            if (editor.tiles[y][x] == TILE_LASER)
+            {
+               Rectangle lr = (Rectangle){CellToWorld(x), CellToWorld(y) + 1.0f, (float)SQUARE_SIZE, 3.0f};
+               if (CheckCollisionRecs(pb, lr))
+               {
+                  death = true;
+                  break;
+               }
+            }
+         }
+         if (death)
+            break;
+      }
    }
 }
 
 // Render game
 void RenderGame(const GameState *game)
 {
-    // World tiles
-    RenderTiles(&editor);
+   // World tiles
+   RenderTiles(&editor);
 
-    // Player & exit
-    DrawRectangleRec(PlayerAABB(game), BLUE);
-    DrawRectangleRec(ExitAABB(game), GREEN);
+   // Player & exit
+   DrawRectangleRec(PlayerAABB(game), BLUE);
+   DrawRectangleRec(ExitAABB(game), GREEN);
 
-    // HUD
-    DrawStats(game);
+   // HUD
+   DrawStats(game);
 }
 
 int main(void)
