@@ -9,6 +9,7 @@
 #include <sys/stat.h> // mkdir
 #include <sys/types.h>
 #include <unistd.h>
+#include <dirent.h>
 #endif
 #include <errno.h>
 #include <math.h>
@@ -20,8 +21,11 @@ static bool death = false;
 // Editor constants
 #define MAX_SQUARES 1024
 #define SQUARE_SIZE 20
-#define LEVEL_FILE "levels/level1.txt"
 #define LEVEL_FILE_BIN "levels/level1.lvl"
+
+// Mutable current level paths (updated by menus / hashing)
+static char gLevelBinPath[260] = LEVEL_FILE_BIN;
+static bool gCreateNewRequested = false;
 
 // Window constants
 #define WINDOW_WIDTH 800
@@ -79,6 +83,8 @@ static inline Vector2 SnapToGrid(Vector2 p)
 typedef enum
 {
    SCREEN_MENU,
+   SCREEN_SELECT_EDIT,
+   SCREEN_SELECT_PLAY,
    SCREEN_LEVEL_EDITOR,
    SCREEN_GAME_LEVEL,
    SCREEN_VICTORY,
@@ -86,11 +92,12 @@ typedef enum
 } ScreenState;
 
 // Menu options
-#define MENU_OPTION_COUNT 2
+#define MENU_OPTION_COUNT 3
 typedef enum
 {
-   MENU_LEVEL_EDITOR,
-   MENU_GAME_LEVEL
+   MENU_EDIT_EXISTING,
+   MENU_CREATE_NEW,
+   MENU_PLAY_LEVEL
 } MenuOption;
 
 typedef enum
@@ -112,6 +119,20 @@ typedef enum
    TILE_EXIT = 4
 } TileType;
 
+typedef struct GameState
+{
+   int score;
+   Vector2 playerPos;     // top-left corner of player AABB
+   Vector2 playerVel;     // px/s
+   bool onGround;         // is standing on a block or floor
+   float coyoteTimer;     // seconds left to allow jump after leaving ground
+   float jumpBufferTimer; // seconds left to consume buffered jump
+   Vector2 exitPos;
+   bool crouching;         // crouch state
+   float groundStickTimer; // seconds to remain grounded after contact
+   // Add more game variables as needed
+} GameState;
+
 typedef struct
 {
    Vector2 cursor;
@@ -130,30 +151,123 @@ static void EnsureLevelsDir(void)
 {
 #ifdef _WIN32
    if (_mkdir("levels") == -1 && errno != EEXIST)
-   {
-      // ignore errors other than "already exists"
+   { /* ignore other errors */
    }
 #else
    if (mkdir("levels", 0755) == -1 && errno != EEXIST)
-   {
-      // ignore errors other than "already exists"
+   { /* ignore other errors */
    }
 #endif
 }
-
-typedef struct GameState
+// ---- Level catalog ----
+typedef struct
 {
-   int score;
-   Vector2 playerPos;     // top-left corner of player AABB
-   Vector2 playerVel;     // px/s
-   bool onGround;         // is standing on a block or floor
-   float coyoteTimer;     // seconds left to allow jump after leaving ground
-   float jumpBufferTimer; // seconds left to consume buffered jump
-   Vector2 exitPos;
-   bool crouching;         // crouch state
-   float groundStickTimer; // seconds to remain grounded after contact
-   // Add more game variables as needed
-} GameState;
+   char baseName[128];
+   char binPath[260];
+   char textPath[260];
+} LevelEntry;
+typedef struct
+{
+   LevelEntry items[256];
+   int count;
+} LevelCatalog;
+
+// ---- Numbered level filenames: level{index+1}.lvl ----
+static int ParseLevelNumber(const char *baseName)
+{
+   // Expect baseName like "level7" -> returns 0-based index 6, or -1 if not matching
+   if (!baseName)
+      return -1;
+   if (strncmp(baseName, "level", 5) != 0)
+      return -1;
+   const char *p = baseName + 5;
+   if (!*p)
+      return -1;
+   int n = 0;
+   while (*p)
+   {
+      if (*p < '0' || *p > '9')
+         return -1;
+      n = n * 10 + (*p - '0');
+      p++;
+   }
+   if (n <= 0)
+      return -1; // filenames are 1-based
+   return n - 1; // convert to 0-based index
+}
+
+static void MakeLevelPathFromIndex(int index0, char *out, size_t outSz)
+{
+   // index0 is 0-based; filename is 1-based
+   snprintf(out, outSz, "levels/level%d.lvl", index0 + 1);
+}
+
+static void CatalogSortByNumber(LevelCatalog *cat)
+{
+   // simple insertion sort by parsed level number ascending; unknowns go last
+   for (int i = 1; i < cat->count; ++i)
+   {
+      LevelEntry key = cat->items[i];
+      int kn = ParseLevelNumber(key.baseName);
+      int j = i - 1;
+      while (j >= 0)
+      {
+         int jn = ParseLevelNumber(cat->items[j].baseName);
+         if (jn <= kn && !(jn == -1 && kn != -1))
+            break;
+         cat->items[j + 1] = cat->items[j];
+         --j;
+      }
+      cat->items[j + 1] = key;
+   }
+}
+
+static void ScanLevels(LevelCatalog *cat)
+{
+   cat->count = 0;
+#ifndef _WIN32
+   DIR *d = opendir("levels");
+   if (d)
+   {
+      struct dirent *ent;
+      while ((ent = readdir(d)) != NULL)
+      {
+         if (ent->d_type == DT_DIR)
+            continue;
+         const char *name = ent->d_name;
+         size_t len = strlen(name);
+         if (len > 4 && strcmp(name + len - 4, ".lvl") == 0)
+         {
+            LevelEntry *e = &cat->items[cat->count++];
+            snprintf(e->binPath, sizeof(e->binPath), "levels/%s", name);
+            snprintf(e->baseName, sizeof(e->baseName), "%.*s", (int)(len - 4), name);
+            e->textPath[0] = '\0';
+            if (cat->count >= 256)
+               break;
+         }
+      }
+      closedir(d);
+   }
+   // sort by numeric order (level1, level2, ...)
+   CatalogSortByNumber(cat);
+#else
+   (void)cat;
+#endif
+}
+
+static int FindNextLevelIndex(void)
+{
+   LevelCatalog tmp;
+   ScanLevels(&tmp);
+   int maxSeen = -1;
+   for (int i = 0; i < tmp.count; ++i)
+   {
+      int n = ParseLevelNumber(tmp.items[i].baseName);
+      if (n > maxSeen)
+         maxSeen = n;
+   }
+   return maxSeen + 1; // next available 0-based index
+}
 
 // Binary level I/O
 bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed);
@@ -344,7 +458,7 @@ static void ResolveAxis(float *pos, float *vel, float other, float w, float h, b
 bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed)
 {
    EnsureLevelsDir();
-   FILE *f = fopen(LEVEL_FILE_BIN, "wb");
+   FILE *f = fopen(gLevelBinPath, "wb");
    if (!f)
       return false;
 
@@ -405,7 +519,6 @@ bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed)
 
    // Tiles (row-major)
    for (int y = 0; y < GRID_ROWS; ++y)
-   {
       for (int x = 0; x < GRID_COLS; ++x)
       {
          uint8_t t = (uint8_t)ed->tiles[y][x];
@@ -415,43 +528,14 @@ bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed)
             return false;
          }
       }
-   }
 
    fclose(f);
    return true;
 }
 
-void SaveLevel(const GameState *game, const LevelEditorState *ed)
-{
-   EnsureLevelsDir();
-   FILE *f = fopen(LEVEL_FILE, "w");
-   if (!f)
-      return;
-   // Player/Exit: derive from grid if present, otherwise from game state
-   Vector2 p = game->playerPos, e = game->exitPos;
-   FindTileWorldPos(ed, TILE_PLAYER, &p);
-   FindTileWorldPos(ed, TILE_EXIT, &e);
-   fprintf(f, "PLAYER %d %d\n", (int)p.x, (int)p.y);
-   fprintf(f, "EXIT %d %d\n", (int)e.x, (int)e.y);
-   for (int y = 0; y < GRID_ROWS; ++y)
-   {
-      for (int x = 0; x < GRID_COLS; ++x)
-      {
-         TileType t = ed->tiles[y][x];
-         if (t == TILE_BLOCK)
-            fprintf(f, "BLOCK %d %d\n", (int)CellToWorld(x), (int)CellToWorld(y));
-         else if (t == TILE_LASER)
-            fprintf(f, "LASER %d %d\n", (int)CellToWorld(x), (int)CellToWorld(y));
-      }
-   }
-   fclose(f);
-   // Also save binary alongside text
-   (void)SaveLevelBinary(game, ed);
-}
-
 bool LoadLevelBinary(GameState *game, LevelEditorState *ed)
 {
-   FILE *f = fopen(LEVEL_FILE_BIN, "rb");
+   FILE *f = fopen(gLevelBinPath, "rb");
    if (!f)
       return false;
 
@@ -523,7 +607,6 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed)
          ed->tiles[y][x] = TILE_EMPTY;
 
    for (int y = 0; y < GRID_ROWS; ++y)
-   {
       for (int x = 0; x < GRID_COLS; ++x)
       {
          uint8_t t;
@@ -534,52 +617,12 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed)
          }
          ed->tiles[y][x] = (TileType)t;
       }
-   }
 
    fclose(f);
 
    // Apply positions
    game->playerPos = (Vector2){(float)px, (float)py};
    game->exitPos = (Vector2){(float)ex, (float)ey};
-   return true;
-}
-
-bool LoadLevel(GameState *game, LevelEditorState *ed)
-{
-   FILE *f = fopen(LEVEL_FILE, "r");
-   if (!f)
-      return false;
-   // clear grid
-   for (int y = 0; y < GRID_ROWS; ++y)
-      for (int x = 0; x < GRID_COLS; ++x)
-         ed->tiles[y][x] = TILE_EMPTY;
-   char type[16];
-   int x, y;
-   Vector2 tmp;
-   while (fscanf(f, "%15s %d %d", type, &x, &y) == 3)
-   {
-      int cx = WorldToCellX((float)x);
-      int cy = WorldToCellY((float)y);
-      if (strcmp(type, "PLAYER") == 0)
-      {
-         SetUniqueTile(ed, cx, cy, TILE_PLAYER);
-         game->playerPos = (Vector2){x, y};
-      }
-      else if (strcmp(type, "EXIT") == 0)
-      {
-         SetUniqueTile(ed, cx, cy, TILE_EXIT);
-         game->exitPos = (Vector2){x, y};
-      }
-      else if (strcmp(type, "BLOCK") == 0)
-      {
-         SetTile(ed, cx, cy, TILE_BLOCK);
-      }
-      else if (strcmp(type, "LASER") == 0)
-      {
-         SetTile(ed, cx, cy, TILE_LASER);
-      }
-   }
-   fclose(f);
    return true;
 }
 
@@ -602,13 +645,20 @@ void UpdateMenu(ScreenState *screen, int *selected)
    // Select option
    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
    {
-      if (*selected == MENU_LEVEL_EDITOR)
+      if (*selected == MENU_EDIT_EXISTING)
       {
+         *screen = SCREEN_SELECT_EDIT;
+      }
+      else if (*selected == MENU_CREATE_NEW)
+      {
+         // signal we want a brand-new level and reset the path sentinel
+         gCreateNewRequested = true;
+         snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", LEVEL_FILE_BIN);
          *screen = SCREEN_LEVEL_EDITOR;
       }
-      else if (*selected == MENU_GAME_LEVEL)
+      else if (*selected == MENU_PLAY_LEVEL)
       {
-         *screen = SCREEN_GAME_LEVEL;
+         *screen = SCREEN_SELECT_PLAY;
       }
    }
 }
@@ -617,11 +667,33 @@ void UpdateMenu(ScreenState *screen, int *selected)
 void RenderMenu(int selected)
 {
    DrawText("MAIN MENU", 20, 20, 40, DARKGRAY);
-   Color color1 = (selected == MENU_LEVEL_EDITOR) ? RED : BLUE;
-   Color color2 = (selected == MENU_GAME_LEVEL) ? RED : BLUE;
-   DrawText("> Open Level Editor", 20, 70, 24, color1);
-   DrawText("> Start Game Level", 20, 110, 24, color2);
-   DrawText("Use UP/DOWN arrows to navigate, Enter/Space to select", 20, 160, 18, DARKGRAY);
+   const char *items[MENU_OPTION_COUNT] = {"> Edit existing level", "> Create new level", "> Play level"};
+   for (int i = 0; i < MENU_OPTION_COUNT; ++i)
+   {
+      Color c = (selected == i) ? RED : BLUE;
+      DrawText(items[i], 20, 70 + i * 40, 24, c);
+   }
+   DrawText("Use UP/DOWN arrows to navigate, Enter/Space to select", 20, 70 + MENU_OPTION_COUNT * 40 + 10, 18, DARKGRAY);
+}
+// ---- Level list UI ----
+static LevelCatalog gCatalog;
+static int gCatalogIndex = 0;
+
+static void RenderLevelList(const char *title)
+{
+   DrawText(title, 20, 20, 32, DARKGRAY);
+   if (gCatalog.count == 0)
+   {
+      DrawText("No levels found in ./levels", 20, 70, 24, RED);
+      DrawText("Press ESC to go back", 20, 110, 18, DARKGRAY);
+      return;
+   }
+   for (int i = 0; i < gCatalog.count; ++i)
+   {
+      Color c = (i == gCatalogIndex) ? RED : BLUE;
+      DrawText(TextFormat("> %s", gCatalog.items[i].baseName), 20, 70 + i * 30, 24, c);
+   }
+   DrawText("UP/DOWN to select, ENTER to confirm, ESC to back", 20, 70 + gCatalog.count * 30 + 10, 18, DARKGRAY);
 }
 
 // Render victory screen
@@ -781,7 +853,7 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
    // Press Escape to save and return to menu
    if (IsKeyPressed(KEY_ESCAPE))
    {
-      SaveLevel(game, &editor);
+      SaveLevelBinary(game, &editor);
       *screen = SCREEN_MENU;
    }
 }
@@ -1044,19 +1116,15 @@ int main(void)
    // Initialize window (width, height, title)
    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Empty Window");
    SetExitKey(0); // Disable default Esc-to-close behavior
-
-   // Set the target FPS (optional)
    SetTargetFPS(120);
 
    // Initialize game state
-   GameState game = {0};
-   // Offset by one block from left bottom for player and cursor
+   GameState game = (GameState){0};
    game.playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
    game.playerVel = (Vector2){0, 0};
    game.onGround = false;
    game.coyoteTimer = 0.0f;
    game.jumpBufferTimer = 0.0f;
-   // Offset by one block from right bottom for exit
    game.exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
    game.crouching = false;
 
@@ -1064,15 +1132,13 @@ int main(void)
    ScreenState screen = SCREEN_MENU;
    int menuSelected = 0;
 
-   // Main game loop
-   // Initialize editor cursor to left bottom offset by one block
+   // Initialize editor cursor
    editor.cursor = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
 
    bool editorLoaded = false;
    bool gameLevelLoaded = false;
-   while (!WindowShouldClose()) // Detect window close button or ESC key
+   while (!WindowShouldClose())
    {
-      // Update and render based on screen state
       switch (screen)
       {
       case SCREEN_MENU:
@@ -1082,18 +1148,107 @@ int main(void)
          RenderMenu(menuSelected);
          EndDrawing();
          break;
+
+      case SCREEN_SELECT_EDIT:
+      {
+         ScanLevels(&gCatalog);
+         if (gCatalog.count == 0 && IsKeyPressed(KEY_ESCAPE))
+         {
+            screen = SCREEN_MENU;
+            break;
+         }
+         if (IsKeyPressed(KEY_DOWN))
+         {
+            if (++gCatalogIndex >= gCatalog.count)
+               gCatalogIndex = 0;
+         }
+         if (IsKeyPressed(KEY_UP))
+         {
+            if (--gCatalogIndex < 0)
+               gCatalogIndex = gCatalog.count - 1;
+         }
+         if (IsKeyPressed(KEY_ESCAPE))
+         {
+            screen = SCREEN_MENU;
+            break;
+         }
+         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+         {
+            snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", gCatalog.items[gCatalogIndex].binPath);
+            editorLoaded = false;
+            screen = SCREEN_LEVEL_EDITOR;
+         }
+         BeginDrawing();
+         ClearBackground(RAYWHITE);
+         RenderLevelList("Select a level to edit");
+         EndDrawing();
+         break;
+      }
+
+      case SCREEN_SELECT_PLAY:
+      {
+         ScanLevels(&gCatalog);
+         if (gCatalog.count == 0 && IsKeyPressed(KEY_ESCAPE))
+         {
+            screen = SCREEN_MENU;
+            break;
+         }
+         if (IsKeyPressed(KEY_DOWN))
+         {
+            if (++gCatalogIndex >= gCatalog.count)
+               gCatalogIndex = 0;
+         }
+         if (IsKeyPressed(KEY_UP))
+         {
+            if (--gCatalogIndex < 0)
+               gCatalogIndex = gCatalog.count - 1;
+         }
+         if (IsKeyPressed(KEY_ESCAPE))
+         {
+            screen = SCREEN_MENU;
+            break;
+         }
+         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+         {
+            snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", gCatalog.items[gCatalogIndex].binPath);
+            gameLevelLoaded = false;
+            screen = SCREEN_GAME_LEVEL;
+         }
+         BeginDrawing();
+         ClearBackground(RAYWHITE);
+         RenderLevelList("Select a level to play");
+         EndDrawing();
+         break;
+      }
+
       case SCREEN_LEVEL_EDITOR:
       {
          if (!editorLoaded)
          {
-            bool loaded = LoadLevelBinary(&game, &editor);
-            if (!loaded)
-               loaded = LoadLevel(&game, &editor);
-            if (!loaded)
+            EnsureLevelsDir();
+
+            if (gCreateNewRequested)
             {
+               // Create a brand-new level file with the next index
                CreateDefaultLevel(&game, &editor);
+               int nextIdx0 = FindNextLevelIndex();
+               MakeLevelPathFromIndex(nextIdx0, gLevelBinPath, sizeof(gLevelBinPath));
+               SaveLevelBinary(&game, &editor);
+               gCreateNewRequested = false;
+               editorLoaded = true;
             }
-            editorLoaded = true;
+            else
+            {
+               // Load existing (from selection or default sentinel)
+               FILE *bf = fopen(gLevelBinPath, "rb");
+               bool haveExisting = (bf != NULL);
+               if (bf) fclose(bf);
+
+               bool loaded = false;
+               if (haveExisting) loaded = LoadLevelBinary(&game, &editor);
+               if (!loaded) { CreateDefaultLevel(&game, &editor); }
+               editorLoaded = true;
+            }
          }
          UpdateLevelEditor(&screen, &game);
          BeginDrawing();
@@ -1102,20 +1257,18 @@ int main(void)
          EndDrawing();
          break;
       }
+
       case SCREEN_GAME_LEVEL:
       {
          if (!gameLevelLoaded)
          {
             bool loaded = LoadLevelBinary(&game, &editor);
             if (!loaded)
-               loaded = LoadLevel(&game, &editor);
-            if (!loaded)
             {
                CreateDefaultLevel(&game, &editor);
             }
             gameLevelLoaded = true;
          }
-         // ESC always returns to main menu while playing
          if (IsKeyPressed(KEY_ESCAPE))
          {
             screen = SCREEN_MENU;
@@ -1131,14 +1284,13 @@ int main(void)
          ClearBackground(RAYWHITE);
          RenderGame(&game);
          EndDrawing();
-
-         // If victory, transition to victory screen
          if (victory)
          {
             screen = SCREEN_VICTORY;
          }
          break;
       }
+
       case SCREEN_DEATH:
       {
          BeginDrawing();
@@ -1151,6 +1303,7 @@ int main(void)
          }
          break;
       }
+
       case SCREEN_VICTORY:
       {
          BeginDrawing();
@@ -1164,6 +1317,7 @@ int main(void)
          break;
       }
       }
+
       // Reset flags when returning to menu
       if (screen == SCREEN_MENU)
       {
@@ -1174,8 +1328,6 @@ int main(void)
       }
    }
 
-   // De-initialize window
    CloseWindow();
-
    return 0;
 }
