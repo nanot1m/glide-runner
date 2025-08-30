@@ -1,0 +1,38 @@
+BasedOnStyle: LLVM
+UseTab: ForIndentation
+IndentWidth: 4
+ContinuationIndentWidth: 4
+TabWidth: 4
+ColumnLimit: 0
+
+# Braces and compact one-liners
+BreakBeforeBraces: Attach
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortBlocksOnASingleLine: Always
+
+# Pointers like "const char *x"
+DerivePointerAlignment: false
+PointerAlignment: Right
+
+# Sort includes within each block
+SortIncludes: true
+IncludeBlocks: Preserve
+IncludeCategories:
+  - Regex: '^<.*>$'
+    Priority: 1   # System headers (<...>)
+  - Regex: '^"raylib\\.h"$'
+    Priority: 2   # Raylib specifically
+  - Regex: '^".*"$'
+    Priority: 3   # Other project/local headers
+
+# Keep formatting simple and minimal
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignTrailingComments: false
+BinPackArguments: false
+BinPackParameters: false
+IndentCaseLabels: false
+BreakBeforeBinaryOperators: None
+KeepEmptyLinesAtTheStartOfBlocks: true
