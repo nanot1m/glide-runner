@@ -1364,6 +1364,15 @@ void UpdateGame(GameState *game)
    if (wantJumpPress)
       game->jumpBufferTimer = JUMP_BUFFER_TIME;
 
+   // Play jump SFX immediately on keypress when a jump is actually possible
+   if (wantJumpPress && sfxJumpLoaded)
+   {
+      bool canGroundOrCoyote = !game->crouching && (game->onGround || game->coyoteTimer > 0.0f);
+      bool canWall = !game->crouching && !game->onGround && (touchingLeft || touchingRight);
+      if (canGroundOrCoyote || canWall)
+         PlaySound(sfxJump);
+   }
+
    // Horizontal acceleration (disabled while crouching)
    float accelX = 0.0f;
    if (!game->crouching)
@@ -1385,8 +1394,6 @@ void UpdateGame(GameState *game)
          game->onGround = false;
          game->coyoteTimer = 0.0f;
          game->jumpBufferTimer = 0.0f;
-         if (sfxJumpLoaded)
-            PlaySound(sfxJump);
       }
    }
 
@@ -1398,8 +1405,6 @@ void UpdateGame(GameState *game)
          game->playerVel.x = WALL_JUMP_PUSH_X; // push to the right
       if (touchingRight)
          game->playerVel.x = -WALL_JUMP_PUSH_X; // push to the left
-      if (sfxJumpLoaded)
-         PlaySound(sfxJump);
    }
 
    // Gravity
@@ -1526,8 +1531,8 @@ int main(void)
 {
    // Initialize window (width, height, title)
    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Empty Window");
-   // Reduce audio buffering to lower latency (call BEFORE InitAudioDevice)
-   SetAudioStreamBufferSizeDefault(512); // try 256–1024; smaller = lower latency, more CPU risk
+   // Audio buffering: use a stable, larger buffer as requested
+   SetAudioStreamBufferSizeDefault(1024);
    InitAudioDevice();
    SetMasterVolume(0.8f); // tweak to taste
    LoadAllSfx();
