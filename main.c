@@ -626,101 +626,147 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed)
    return true;
 }
 
-// --- Menu UI helpers (mouse + WASD) ---
-static Rectangle MenuItemRect(int index)
+// --- Generalized UI list (mouse + WASD/Arrows) ---
+typedef struct
 {
-    // Must match RenderMenu layout: start at y=70, step 40, 24px text
-    float x = 20.0f;
-    float y = 70.0f + index * 40.0f;
-    float w = (float)(WINDOW_WIDTH - 40);
-    float h = 28.0f; // fits 24px text comfortably
-    return (Rectangle){x, y, w, h};
-}
-static int MenuIndexAtMouse(Vector2 m, int itemCount)
+   float startY;     // top Y of first item
+   float stepY;      // vertical spacing between items
+   float itemHeight; // height of hover rect
+   int fontSize;     // text size
+} UiListSpec;
+
+static Rectangle UiListItemRect(const UiListSpec *spec, int index)
 {
-    for (int i = 0; i < itemCount; ++i)
-    {
-        if (CheckCollisionPointRec(m, MenuItemRect(i))) return i;
-    }
-    return -1;
+   float x = 20.0f;
+   float y = spec->startY + index * spec->stepY;
+   float w = (float)(WINDOW_WIDTH - 40);
+   float h = spec->itemHeight;
+   return (Rectangle){x, y, w, h};
 }
 
-// Level list helpers
-static Rectangle ListItemRect(int index)
+static int UiListIndexAtMouse(Vector2 m, const UiListSpec *spec, int itemCount)
 {
-    float x = 20.0f;
-    float y = 70.0f + index * 30.0f;
-    float w = (float)(WINDOW_WIDTH - 40);
-    float h = 24.0f; // fits 24px text
-    return (Rectangle){x, y, w, h};
+   for (int i = 0; i < itemCount; ++i)
+      if (CheckCollisionPointRec(m, UiListItemRect(spec, i)))
+         return i;
+   return -1;
 }
-static int ListIndexAtMouse(Vector2 m, int itemCount)
+
+static inline bool UiListIsActivatePressed(void)
 {
-    for (int i = 0; i < itemCount; ++i)
-    {
-        if (CheckCollisionPointRec(m, ListItemRect(i))) return i;
-    }
-    return -1;
+   return IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+}
+
+// Updates selected index by keyboard/mouse and reports activation
+static void UiListHandle(const UiListSpec *spec, int *selected, int itemCount, bool *outActivated)
+{
+   // arrows + WASD cyclic navigation
+   if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))
+   {
+      (*selected)++;
+      if (*selected >= itemCount)
+         *selected = (itemCount > 0 ? 0 : 0);
+   }
+   if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))
+   {
+      (*selected)--;
+      if (*selected < 0)
+         *selected = (itemCount > 0 ? itemCount - 1 : 0);
+   }
+
+   // mouse hover selects
+   Vector2 m = GetMousePosition();
+   int hover = UiListIndexAtMouse(m, spec, itemCount);
+   if (hover != -1)
+      *selected = hover;
+
+   // activation
+   bool activated = (itemCount > 0) && UiListIsActivatePressed();
+   if (outActivated)
+      *outActivated = activated;
+}
+
+typedef const char *(*LabelAtFn)(int index, void *ud);
+
+static void UiListRenderCB(const UiListSpec *spec, int selected, int itemCount, LabelAtFn labelAt, void *ud,
+                           const char *title, const char *emptyMsg, const char *hint)
+{
+   if (title)
+      DrawText(title, 20, 20, 32, DARKGRAY);
+   if (itemCount == 0)
+   {
+      if (emptyMsg)
+         DrawText(emptyMsg, 20, 70, 24, RED);
+      DrawText("Press ESC to go back", 20, 110, 18, DARKGRAY);
+      return;
+   }
+   Vector2 m = GetMousePosition();
+   int hover = UiListIndexAtMouse(m, spec, itemCount);
+   for (int i = 0; i < itemCount; ++i)
+   {
+      Rectangle r = UiListItemRect(spec, i);
+      if (hover == i)
+         DrawRectangleRec(r, (Color){230, 230, 230, 255});
+      Color c = (selected == i) ? RED : BLUE;
+      const char *label = labelAt ? labelAt(i, ud) : "";
+      DrawText(label, (int)r.x, (int)r.y, spec->fontSize, c);
+   }
+   if (hint)
+      DrawText(hint, 20, (int)(spec->startY + itemCount * spec->stepY + 10), 18, DARKGRAY);
+}
+
+static const UiListSpec MENU_SPEC = {.startY = 70.0f, .stepY = 40.0f, .itemHeight = 28.0f, .fontSize = 24};
+static const UiListSpec LIST_SPEC = {.startY = 70.0f, .stepY = 30.0f, .itemHeight = 24.0f, .fontSize = 24};
+
+// Global menu labels and callbacks (no nested functions)
+static const char *gMenuItems[MENU_OPTION_COUNT] = {
+    "> Edit existing level",
+    "> Create new level",
+    "> Play level"};
+
+static const char *MenuLabelAtCB(int i, void *ud)
+{
+   (void)ud;
+   return gMenuItems[i];
+}
+
+static const char *CatalogLabelAtCB(int i, void *ud)
+{
+   LevelCatalog *c = (LevelCatalog *)ud;
+   return c->items[i].baseName;
 }
 
 // Update menu logic
 void UpdateMenu(ScreenState *screen, int *selected)
 {
-    // Keyboard navigation (arrows + WASD)
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))
-    {
-       (*selected)++;
-       if (*selected >= MENU_OPTION_COUNT) *selected = 0;
-    }
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))
-    {
-       (*selected)--;
-       if (*selected < 0) *selected = MENU_OPTION_COUNT - 1;
-    }
-
-    // Mouse hover updates selection
-    Vector2 m = GetMousePosition();
-    int hover = MenuIndexAtMouse(m, MENU_OPTION_COUNT);
-    if (hover != -1) *selected = hover;
-
-    // Activate on Enter/Space or mouse click
-    bool activate = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-    if (activate)
-    {
-       if (*selected == MENU_EDIT_EXISTING)
-       {
-          *screen = SCREEN_SELECT_EDIT;
-       }
-       else if (*selected == MENU_CREATE_NEW)
-       {
-          // signal we want a brand-new level and reset the path sentinel
-          gCreateNewRequested = true;
-          snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", LEVEL_FILE_BIN);
-          *screen = SCREEN_LEVEL_EDITOR;
-       }
-       else if (*selected == MENU_PLAY_LEVEL)
-       {
-          *screen = SCREEN_SELECT_PLAY;
-       }
-    }
+   bool activate = false;
+   UiListHandle(&MENU_SPEC, selected, MENU_OPTION_COUNT, &activate);
+   if (activate)
+   {
+      if (*selected == MENU_EDIT_EXISTING)
+      {
+         *screen = SCREEN_SELECT_EDIT;
+      }
+      else if (*selected == MENU_CREATE_NEW)
+      {
+         gCreateNewRequested = true;
+         snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", LEVEL_FILE_BIN);
+         *screen = SCREEN_LEVEL_EDITOR;
+      }
+      else if (*selected == MENU_PLAY_LEVEL)
+      {
+         *screen = SCREEN_SELECT_PLAY;
+      }
+   }
 }
 
 // Render menu
 void RenderMenu(int selected)
 {
-    DrawText("MAIN MENU", 20, 20, 40, DARKGRAY);
-    const char *items[MENU_OPTION_COUNT] = { "> Edit existing level", "> Create new level", "> Play level" };
-    Vector2 m = GetMousePosition();
-    int hover = MenuIndexAtMouse(m, MENU_OPTION_COUNT);
-    for (int i = 0; i < MENU_OPTION_COUNT; ++i)
-    {
-       Rectangle r = MenuItemRect(i);
-       if (hover == i) DrawRectangleRec(r, (Color){230,230,230,255});
-       Color c = (selected == i) ? RED : BLUE;
-       DrawText(items[i], (int)r.x, (int)r.y, 24, c);
-    }
-    DrawText("Mouse: click items | WASD/Arrows: navigate | Enter/Space: select",
-             20, 70 + MENU_OPTION_COUNT * 40 + 10, 18, DARKGRAY);
+   UiListRenderCB(&MENU_SPEC, selected, MENU_OPTION_COUNT, MenuLabelAtCB, NULL,
+                  "MAIN MENU",
+                  NULL,
+                  "Mouse: click items | WASD/Arrows: navigate | Enter/Space: select");
 }
 // ---- Level list UI ----
 static LevelCatalog gCatalog;
@@ -728,23 +774,10 @@ static int gCatalogIndex = 0;
 
 static void RenderLevelList(const char *title)
 {
-   DrawText(title, 20, 20, 32, DARKGRAY);
-   if (gCatalog.count == 0)
-   {
-      DrawText("No levels found in ./levels", 20, 70, 24, RED);
-      DrawText("Press ESC to go back", 20, 110, 18, DARKGRAY);
-      return;
-   }
-   Vector2 m = GetMousePosition();
-   int hover = ListIndexAtMouse(m, gCatalog.count);
-   for (int i = 0; i < gCatalog.count; ++i)
-   {
-      Rectangle r = ListItemRect(i);
-      if (hover == i) DrawRectangleRec(r, (Color){230,230,230,255});
-      Color c = (i == gCatalogIndex) ? RED : BLUE;
-      DrawText(TextFormat("> %s", gCatalog.items[i].baseName), (int)r.x, (int)r.y, 24, c);
-   }
-   DrawText("UP/DOWN to select, ENTER to confirm, ESC to back", 20, 70 + gCatalog.count * 30 + 10, 18, DARKGRAY);
+   UiListRenderCB(&LIST_SPEC, gCatalogIndex, gCatalog.count, CatalogLabelAtCB, &gCatalog,
+                  title,
+                  "No levels found in ./levels",
+                  "UP/DOWN/W/S to select, ENTER/CLICK to confirm, ESC to back");
 }
 
 // Render victory screen
@@ -1203,23 +1236,14 @@ int main(void)
       case SCREEN_SELECT_EDIT:
       {
          ScanLevels(&gCatalog);
-         if (gCatalog.count == 0 && IsKeyPressed(KEY_ESCAPE))
-         { screen = SCREEN_MENU; break; }
-
-         // Keyboard navigation (arrows + WASD)
-         if (gCatalog.count > 0)
+         if (IsKeyPressed(KEY_ESCAPE))
          {
-            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { if (++gCatalogIndex >= gCatalog.count) gCatalogIndex = 0; }
-            if (IsKeyPressed(KEY_UP)   || IsKeyPressed(KEY_W)) { if (--gCatalogIndex < 0) gCatalogIndex = gCatalog.count - 1; }
+            screen = SCREEN_MENU;
+            break;
          }
-         if (IsKeyPressed(KEY_ESCAPE)) { screen = SCREEN_MENU; break; }
-
-         // Mouse hover/select
-         Vector2 m = GetMousePosition();
-         int hover = ListIndexAtMouse(m, gCatalog.count);
-         if (hover != -1) gCatalogIndex = hover;
-         bool activate = (gCatalog.count > 0) && (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON));
-         if (activate)
+         bool activate = false;
+         UiListHandle(&LIST_SPEC, &gCatalogIndex, gCatalog.count, &activate);
+         if (activate && gCatalog.count > 0)
          {
             snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", gCatalog.items[gCatalogIndex].binPath);
             editorLoaded = false;
@@ -1235,23 +1259,14 @@ int main(void)
       case SCREEN_SELECT_PLAY:
       {
          ScanLevels(&gCatalog);
-         if (gCatalog.count == 0 && IsKeyPressed(KEY_ESCAPE))
-         { screen = SCREEN_MENU; break; }
-
-         // Keyboard navigation (arrows + WASD)
-         if (gCatalog.count > 0)
+         if (IsKeyPressed(KEY_ESCAPE))
          {
-            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { if (++gCatalogIndex >= gCatalog.count) gCatalogIndex = 0; }
-            if (IsKeyPressed(KEY_UP)   || IsKeyPressed(KEY_W)) { if (--gCatalogIndex < 0) gCatalogIndex = gCatalog.count - 1; }
+            screen = SCREEN_MENU;
+            break;
          }
-         if (IsKeyPressed(KEY_ESCAPE)) { screen = SCREEN_MENU; break; }
-
-         // Mouse hover/select
-         Vector2 m = GetMousePosition();
-         int hover = ListIndexAtMouse(m, gCatalog.count);
-         if (hover != -1) gCatalogIndex = hover;
-         bool activate = (gCatalog.count > 0) && (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON));
-         if (activate)
+         bool activate = false;
+         UiListHandle(&LIST_SPEC, &gCatalogIndex, gCatalog.count, &activate);
+         if (activate && gCatalog.count > 0)
          {
             snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", gCatalog.items[gCatalogIndex].binPath);
             gameLevelLoaded = false;
@@ -1285,11 +1300,16 @@ int main(void)
                // Load existing (from selection or default sentinel)
                FILE *bf = fopen(gLevelBinPath, "rb");
                bool haveExisting = (bf != NULL);
-               if (bf) fclose(bf);
+               if (bf)
+                  fclose(bf);
 
                bool loaded = false;
-               if (haveExisting) loaded = LoadLevelBinary(&game, &editor);
-               if (!loaded) { CreateDefaultLevel(&game, &editor); }
+               if (haveExisting)
+                  loaded = LoadLevelBinary(&game, &editor);
+               if (!loaded)
+               {
+                  CreateDefaultLevel(&game, &editor);
+               }
                editorLoaded = true;
             }
          }
