@@ -9,3 +9,7 @@ main: main.c
 
 clean:
 	rm -f main
+
+.PHONY: build and start
+start: main
+	./main

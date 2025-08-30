@@ -149,6 +149,65 @@ typedef struct GameState
    // Add more game variables as needed
 } GameState;
 
+// ----------------------
+// Rendering & AABB helpers
+// ----------------------
+static inline float PlayerCurrentHeight(const GameState *g)
+{
+    return g->crouching ? PLAYER_H_CROUCH : PLAYER_H;
+}
+
+static inline Rectangle PlayerAABB(const GameState *g)
+{
+    float h = PlayerCurrentHeight(g);
+    return (Rectangle){ g->playerPos.x, g->playerPos.y, PLAYER_W, h };
+}
+
+static inline Rectangle ExitAABB(const GameState *g)
+{
+    return (Rectangle){ g->exitPos.x, g->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE };
+}
+
+static inline Rectangle LaserStripeRect(Vector2 laserPos)
+{
+    return (Rectangle){ laserPos.x, laserPos.y + 1.0f, (float)SQUARE_SIZE, 3.0f };
+}
+
+// Draw all solid tiles (blocks) and laser stripes used by both editor and game
+static void RenderTiles(const LevelEditorState *ed)
+{
+    for (int i = 0; i < ed->squareCount; ++i)
+    {
+        DrawRectangleV(ed->squares[i].pos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GRAY);
+    }
+    for (int i = 0; i < ed->laserCount; ++i)
+    {
+        Rectangle lr = LaserStripeRect(ed->lasers[i].pos);
+        DrawRectangleRec(lr, RED);
+    }
+}
+
+static void DrawStats(const GameState *g)
+{
+    DrawText(TextFormat("FPS: %d", GetFPS()), 10, 40, 20, RED);
+    DrawText(TextFormat("Vel: (%.0f, %.0f)", g->playerVel.x, g->playerVel.y), 10, 70, 20, DARKGRAY);
+    DrawText(g->onGround ? "Grounded" : "Air", 10, 100, 20, DARKGRAY);
+    DrawText(TextFormat("Coy: %.2f  Buf: %.2f", g->coyoteTimer, g->jumpBufferTimer), 10, 130, 20, DARKGRAY);
+}
+
+static void RenderMessageScreen(const char *title, const char *subtitle, Color accent)
+{
+    int cx = WINDOW_WIDTH / 2;
+    int cy = WINDOW_HEIGHT / 2;
+    int titleW = MeasureText(title, 40);
+    DrawText(title, cx - titleW / 2, cy - 60, 40, accent);
+    int subW = MeasureText(subtitle, 24);
+    DrawText(subtitle, cx - subW / 2, cy - 10, 24, DARKGRAY);
+    const char *hint = "Press Enter/Space/Esc to return to menu";
+    int hintW = MeasureText(hint, 20);
+    DrawText(hint, cx - hintW / 2, cy + 40, 20, BLUE);
+}
+
 // ---- Grid collision helpers ----
 static inline int WorldToCellX(float x) { return (int)floorf(x / (float)SQUARE_SIZE); }
 static inline int WorldToCellY(float y) { return (int)floorf(y / (float)SQUARE_SIZE); }
@@ -347,16 +406,12 @@ void RenderMenu(int selected)
 // Render victory screen
 void RenderVictory(void)
 {
-   DrawText("VICTORY!", WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 - 60, 40, GREEN);
-   DrawText("You reached the exit.", WINDOW_WIDTH / 2 - 140, WINDOW_HEIGHT / 2 - 10, 24, DARKGRAY);
-   DrawText("Press Enter/Space/Esc to return to menu", WINDOW_WIDTH / 2 - 230, WINDOW_HEIGHT / 2 + 40, 20, BLUE);
+    RenderMessageScreen("VICTORY!", "You reached the exit.", GREEN);
 }
 
 void RenderDeath(void)
 {
-   DrawText("YOU DIED!", WINDOW_WIDTH / 2 - 120, WINDOW_HEIGHT / 2 - 60, 40, RED);
-   DrawText("You touched a laser.", WINDOW_WIDTH / 2 - 150, WINDOW_HEIGHT / 2 - 10, 24, DARKGRAY);
-   DrawText("Press Enter/Space/Esc to return to menu", WINDOW_WIDTH / 2 - 230, WINDOW_HEIGHT / 2 + 40, 20, BLUE);
+    RenderMessageScreen("YOU DIED!", "You touched a laser.", RED);
 }
 
 // Helper: add block if not exists
@@ -574,7 +629,6 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
 // Render level editor
 void RenderLevelEditor(const GameState *game)
 {
-
    // Draw grid
    for (int x = 0; x <= WINDOW_WIDTH; x += SQUARE_SIZE)
    {
@@ -584,26 +638,14 @@ void RenderLevelEditor(const GameState *game)
    {
       DrawLine(0, y, WINDOW_WIDTH, y, LIGHTGRAY);
    }
-   for (int i = 0; i < editor.squareCount; i++)
-   {
-      DrawRectangleV(editor.squares[i].pos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GRAY);
-   }
-   // Draw laser traps as a red stripe at the top of the tile
-   for (int i = 0; i < editor.laserCount; i++)
-   {
-      int lx = (int)editor.lasers[i].pos.x;
-      int ly = (int)editor.lasers[i].pos.y + 1;
-      DrawRectangle(lx, ly, SQUARE_SIZE, 3, RED); // 3 px high at top edge
-   }
-   // Draw player location as blue square
-   DrawRectangleV(game->playerPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, BLUE);
-   // Draw exit location as green square
-   DrawRectangleV(game->exitPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GREEN);
+   RenderTiles(&editor);
+   DrawRectangleRec((Rectangle){game->playerPos.x, game->playerPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE}, BLUE);
+   DrawRectangleRec((Rectangle){game->exitPos.x,   game->exitPos.y,   (float)SQUARE_SIZE, (float)SQUARE_SIZE}, GREEN);
 
    DrawText("LEVEL EDITOR", 20, 20, 32, DARKGRAY);
    const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit", "Laser Trap"};
    DrawText(TextFormat("Tool: %s (Tab to switch)", toolNames[editor.tool]), 20, 60, 18, BLUE);
-   DrawText("Arrows/Mouse: Move cursor | Space/Left Click: Use tool | 1-5: Tools (5=Laser) | ESC: Menu", 20, 85, 18, DARKGRAY); // Draw placed squares
+   DrawText("Arrows/Mouse: Move cursor | Space/Left Click: Use tool | 1-5: Tools (5=Laser) | ESC: Menu", 20, 85, 18, DARKGRAY);
 
    // Draw cursor
    DrawRectangleLines((int)editor.cursor.x, (int)editor.cursor.y, SQUARE_SIZE, SQUARE_SIZE, RED);
@@ -795,50 +837,37 @@ void UpdateGame(GameState *game)
       game->coyoteTimer = COYOTE_TIME;
 
    // Victory: if player's AABB overlaps the exit tile
-   Rectangle playerBox = {game->playerPos.x, game->playerPos.y, PLAYER_W, aabbH};
-   Rectangle exitBox = {game->exitPos.x, game->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE};
-   if (CheckCollisionRecs(playerBox, exitBox))
+   if (CheckCollisionRecs(PlayerAABB(game), ExitAABB(game)))
    {
-      victory = true;
+       victory = true;
    }
 
    // Death: if player's AABB overlaps any laser trap stripe
-   for (int i = 0; i < editor.laserCount; i++)
    {
-      Rectangle laserBox = {editor.lasers[i].pos.x, editor.lasers[i].pos.y, (float)SQUARE_SIZE, 3.0f};
-      Rectangle playerBox = {game->playerPos.x, game->playerPos.y, PLAYER_W, aabbH};
-      if (CheckCollisionRecs(playerBox, laserBox))
-      {
-         death = true;
-      }
+       Rectangle pb = PlayerAABB(game);
+       for (int i = 0; i < editor.laserCount; ++i)
+       {
+           if (CheckCollisionRecs(pb, LaserStripeRect(editor.lasers[i].pos)))
+           {
+               death = true;
+               break;
+           }
+       }
    }
 }
 
 // Render game
 void RenderGame(const GameState *game)
 {
-   // Draw all blocks
-   for (int i = 0; i < editor.squareCount; i++)
-   {
-      DrawRectangleV(editor.squares[i].pos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GRAY);
-   }
-   // Draw laser traps as red stripes at the top of their tiles
-   for (int i = 0; i < editor.laserCount; i++)
-   {
-      int lx = (int)editor.lasers[i].pos.x;
-      int ly = (int)editor.lasers[i].pos.y + 1;
-      DrawRectangle(lx, ly, SQUARE_SIZE, 3, RED);
-   }
-   // Draw player as blue square
-   float aabbH = game->crouching ? PLAYER_H_CROUCH : PLAYER_H;
-   DrawRectangleV(game->playerPos, (Vector2){PLAYER_W, aabbH}, BLUE);
-   // Draw exit as green square
-   DrawRectangleV(game->exitPos, (Vector2){SQUARE_SIZE, SQUARE_SIZE}, GREEN);
-   // Output actual FPS
-   DrawText(TextFormat("FPS: %d", GetFPS()), 10, 40, 20, RED);
-   DrawText(TextFormat("Vel: (%.0f, %.0f)", game->playerVel.x, game->playerVel.y), 10, 70, 20, DARKGRAY);
-   DrawText(game->onGround ? "Grounded" : "Air", 10, 100, 20, DARKGRAY);
-   DrawText(TextFormat("Coy: %.2f  Buf: %.2f", game->coyoteTimer, game->jumpBufferTimer), 10, 130, 20, DARKGRAY);
+    // World tiles
+    RenderTiles(&editor);
+
+    // Player & exit
+    DrawRectangleRec(PlayerAABB(game), BLUE);
+    DrawRectangleRec(ExitAABB(game), GREEN);
+
+    // HUD
+    DrawStats(game);
 }
 
 int main(void)
