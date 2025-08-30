@@ -10,6 +10,7 @@ void Audio_PlayHover(void);
 void Audio_PlayMenuClick(void);
 void Audio_PlayVictory(void);
 void Audio_PlayDeath(void);
+void Audio_PlayJump(void);
 
 // Menu music control (fade handled inside)
 void Audio_MenuMusicUpdate(bool inMenuScreens, float dt);

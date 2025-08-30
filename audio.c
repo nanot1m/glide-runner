@@ -105,6 +105,9 @@ void Audio_PlayVictory(void) {
 void Audio_PlayDeath(void) {
 	if (sfxDeathLoaded) PlaySound(sfxDeath);
 }
+void Audio_PlayJump(void) {
+	if (sfxJumpLoaded) PlaySound(sfxJump);
+}
 
 void Audio_MenuMusicUpdate(bool inMenuScreens, float dt) {
 	if (!musicMenuLoaded) return;

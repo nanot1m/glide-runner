@@ -171,6 +171,7 @@ void UpdateGame(GameState *game) {
 		game->playerVel.x = touchingLeft ? WALL_JUMP_PUSH_X : -WALL_JUMP_PUSH_X;
 		game->jumpBufferTimer = 0.0f;
 		game->coyoteTimer = 0.0f;
+		Audio_PlayJump();
 	}
 
 	float newX = game->playerPos.x;
@@ -191,8 +192,7 @@ void UpdateGame(GameState *game) {
 		}
 	if (!wasGround && game->onGround) { game->groundStickTimer = GROUND_STICK_TIME; }
 	if (game->groundStickTimer > 0.0f) game->onGround = true;
-	if (didGroundJumpThisFrame) { /* could play jump SFX through audio if desired */
-	}
+	if (didGroundJumpThisFrame) { Audio_PlayJump(); }
 
 	if (newX < 0) {
 		newX = 0;

@@ -54,6 +54,7 @@ WEB_OBJS = $(WEB_SRCS:.c=.web.o)
 	$(EMCC) $(WEB_CFLAGS) -c $< -o $@
 
 web: $(WEB_OBJS)
+	$(MAKE) -C $(RAYLIB_SRC) clean
 	$(MAKE) -C $(RAYLIB_SRC) PLATFORM=PLATFORM_WEB
 	@mkdir -p $(WEB_OUTPUT_DIR)
 	$(EMCC) $(WEB_OBJS) -o $(WEB_OUTPUT_DIR)/index.html $(WEB_LDFLAGS) $(WEB_LIBS) --shell-file $(WEB_SHELL) \
