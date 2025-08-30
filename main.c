@@ -626,54 +626,101 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed)
    return true;
 }
 
+// --- Menu UI helpers (mouse + WASD) ---
+static Rectangle MenuItemRect(int index)
+{
+    // Must match RenderMenu layout: start at y=70, step 40, 24px text
+    float x = 20.0f;
+    float y = 70.0f + index * 40.0f;
+    float w = (float)(WINDOW_WIDTH - 40);
+    float h = 28.0f; // fits 24px text comfortably
+    return (Rectangle){x, y, w, h};
+}
+static int MenuIndexAtMouse(Vector2 m, int itemCount)
+{
+    for (int i = 0; i < itemCount; ++i)
+    {
+        if (CheckCollisionPointRec(m, MenuItemRect(i))) return i;
+    }
+    return -1;
+}
+
+// Level list helpers
+static Rectangle ListItemRect(int index)
+{
+    float x = 20.0f;
+    float y = 70.0f + index * 30.0f;
+    float w = (float)(WINDOW_WIDTH - 40);
+    float h = 24.0f; // fits 24px text
+    return (Rectangle){x, y, w, h};
+}
+static int ListIndexAtMouse(Vector2 m, int itemCount)
+{
+    for (int i = 0; i < itemCount; ++i)
+    {
+        if (CheckCollisionPointRec(m, ListItemRect(i))) return i;
+    }
+    return -1;
+}
+
 // Update menu logic
 void UpdateMenu(ScreenState *screen, int *selected)
 {
-   // Navigate menu
-   if (IsKeyPressed(KEY_DOWN))
-   {
-      (*selected)++;
-      if (*selected >= MENU_OPTION_COUNT)
-         *selected = 0;
-   }
-   if (IsKeyPressed(KEY_UP))
-   {
-      (*selected)--;
-      if (*selected < 0)
-         *selected = MENU_OPTION_COUNT - 1;
-   }
-   // Select option
-   if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
-   {
-      if (*selected == MENU_EDIT_EXISTING)
-      {
-         *screen = SCREEN_SELECT_EDIT;
-      }
-      else if (*selected == MENU_CREATE_NEW)
-      {
-         // signal we want a brand-new level and reset the path sentinel
-         gCreateNewRequested = true;
-         snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", LEVEL_FILE_BIN);
-         *screen = SCREEN_LEVEL_EDITOR;
-      }
-      else if (*selected == MENU_PLAY_LEVEL)
-      {
-         *screen = SCREEN_SELECT_PLAY;
-      }
-   }
+    // Keyboard navigation (arrows + WASD)
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))
+    {
+       (*selected)++;
+       if (*selected >= MENU_OPTION_COUNT) *selected = 0;
+    }
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))
+    {
+       (*selected)--;
+       if (*selected < 0) *selected = MENU_OPTION_COUNT - 1;
+    }
+
+    // Mouse hover updates selection
+    Vector2 m = GetMousePosition();
+    int hover = MenuIndexAtMouse(m, MENU_OPTION_COUNT);
+    if (hover != -1) *selected = hover;
+
+    // Activate on Enter/Space or mouse click
+    bool activate = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    if (activate)
+    {
+       if (*selected == MENU_EDIT_EXISTING)
+       {
+          *screen = SCREEN_SELECT_EDIT;
+       }
+       else if (*selected == MENU_CREATE_NEW)
+       {
+          // signal we want a brand-new level and reset the path sentinel
+          gCreateNewRequested = true;
+          snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", LEVEL_FILE_BIN);
+          *screen = SCREEN_LEVEL_EDITOR;
+       }
+       else if (*selected == MENU_PLAY_LEVEL)
+       {
+          *screen = SCREEN_SELECT_PLAY;
+       }
+    }
 }
 
 // Render menu
 void RenderMenu(int selected)
 {
-   DrawText("MAIN MENU", 20, 20, 40, DARKGRAY);
-   const char *items[MENU_OPTION_COUNT] = {"> Edit existing level", "> Create new level", "> Play level"};
-   for (int i = 0; i < MENU_OPTION_COUNT; ++i)
-   {
-      Color c = (selected == i) ? RED : BLUE;
-      DrawText(items[i], 20, 70 + i * 40, 24, c);
-   }
-   DrawText("Use UP/DOWN arrows to navigate, Enter/Space to select", 20, 70 + MENU_OPTION_COUNT * 40 + 10, 18, DARKGRAY);
+    DrawText("MAIN MENU", 20, 20, 40, DARKGRAY);
+    const char *items[MENU_OPTION_COUNT] = { "> Edit existing level", "> Create new level", "> Play level" };
+    Vector2 m = GetMousePosition();
+    int hover = MenuIndexAtMouse(m, MENU_OPTION_COUNT);
+    for (int i = 0; i < MENU_OPTION_COUNT; ++i)
+    {
+       Rectangle r = MenuItemRect(i);
+       if (hover == i) DrawRectangleRec(r, (Color){230,230,230,255});
+       Color c = (selected == i) ? RED : BLUE;
+       DrawText(items[i], (int)r.x, (int)r.y, 24, c);
+    }
+    DrawText("Mouse: click items | WASD/Arrows: navigate | Enter/Space: select",
+             20, 70 + MENU_OPTION_COUNT * 40 + 10, 18, DARKGRAY);
 }
 // ---- Level list UI ----
 static LevelCatalog gCatalog;
@@ -688,10 +735,14 @@ static void RenderLevelList(const char *title)
       DrawText("Press ESC to go back", 20, 110, 18, DARKGRAY);
       return;
    }
+   Vector2 m = GetMousePosition();
+   int hover = ListIndexAtMouse(m, gCatalog.count);
    for (int i = 0; i < gCatalog.count; ++i)
    {
+      Rectangle r = ListItemRect(i);
+      if (hover == i) DrawRectangleRec(r, (Color){230,230,230,255});
       Color c = (i == gCatalogIndex) ? RED : BLUE;
-      DrawText(TextFormat("> %s", gCatalog.items[i].baseName), 20, 70 + i * 30, 24, c);
+      DrawText(TextFormat("> %s", gCatalog.items[i].baseName), (int)r.x, (int)r.y, 24, c);
    }
    DrawText("UP/DOWN to select, ENTER to confirm, ESC to back", 20, 70 + gCatalog.count * 30 + 10, 18, DARKGRAY);
 }
@@ -1153,26 +1204,22 @@ int main(void)
       {
          ScanLevels(&gCatalog);
          if (gCatalog.count == 0 && IsKeyPressed(KEY_ESCAPE))
+         { screen = SCREEN_MENU; break; }
+
+         // Keyboard navigation (arrows + WASD)
+         if (gCatalog.count > 0)
          {
-            screen = SCREEN_MENU;
-            break;
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { if (++gCatalogIndex >= gCatalog.count) gCatalogIndex = 0; }
+            if (IsKeyPressed(KEY_UP)   || IsKeyPressed(KEY_W)) { if (--gCatalogIndex < 0) gCatalogIndex = gCatalog.count - 1; }
          }
-         if (IsKeyPressed(KEY_DOWN))
-         {
-            if (++gCatalogIndex >= gCatalog.count)
-               gCatalogIndex = 0;
-         }
-         if (IsKeyPressed(KEY_UP))
-         {
-            if (--gCatalogIndex < 0)
-               gCatalogIndex = gCatalog.count - 1;
-         }
-         if (IsKeyPressed(KEY_ESCAPE))
-         {
-            screen = SCREEN_MENU;
-            break;
-         }
-         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+         if (IsKeyPressed(KEY_ESCAPE)) { screen = SCREEN_MENU; break; }
+
+         // Mouse hover/select
+         Vector2 m = GetMousePosition();
+         int hover = ListIndexAtMouse(m, gCatalog.count);
+         if (hover != -1) gCatalogIndex = hover;
+         bool activate = (gCatalog.count > 0) && (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON));
+         if (activate)
          {
             snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", gCatalog.items[gCatalogIndex].binPath);
             editorLoaded = false;
@@ -1189,26 +1236,22 @@ int main(void)
       {
          ScanLevels(&gCatalog);
          if (gCatalog.count == 0 && IsKeyPressed(KEY_ESCAPE))
+         { screen = SCREEN_MENU; break; }
+
+         // Keyboard navigation (arrows + WASD)
+         if (gCatalog.count > 0)
          {
-            screen = SCREEN_MENU;
-            break;
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { if (++gCatalogIndex >= gCatalog.count) gCatalogIndex = 0; }
+            if (IsKeyPressed(KEY_UP)   || IsKeyPressed(KEY_W)) { if (--gCatalogIndex < 0) gCatalogIndex = gCatalog.count - 1; }
          }
-         if (IsKeyPressed(KEY_DOWN))
-         {
-            if (++gCatalogIndex >= gCatalog.count)
-               gCatalogIndex = 0;
-         }
-         if (IsKeyPressed(KEY_UP))
-         {
-            if (--gCatalogIndex < 0)
-               gCatalogIndex = gCatalog.count - 1;
-         }
-         if (IsKeyPressed(KEY_ESCAPE))
-         {
-            screen = SCREEN_MENU;
-            break;
-         }
-         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+         if (IsKeyPressed(KEY_ESCAPE)) { screen = SCREEN_MENU; break; }
+
+         // Mouse hover/select
+         Vector2 m = GetMousePosition();
+         int hover = ListIndexAtMouse(m, gCatalog.count);
+         if (hover != -1) gCatalogIndex = hover;
+         bool activate = (gCatalog.count > 0) && (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON));
+         if (activate)
          {
             snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", gCatalog.items[gCatalogIndex].binPath);
             gameLevelLoaded = false;
