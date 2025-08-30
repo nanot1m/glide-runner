@@ -115,6 +115,10 @@ static bool death = false;
 // Mutable current level paths (updated by menus / hashing)
 static char gLevelBinPath[260] = LEVEL_FILE_BIN;
 static bool gCreateNewRequested = false;
+// One-shot input block when entering menu to avoid carry-over presses/clicks
+// Unified input gate for debouncing across the whole app
+typedef enum { IG_FREE = 0, IG_BLOCK_ONCE = 1, IG_LATCHED = 2 } InputGateState;
+static InputGateState gInputGate = IG_FREE;
 
 // Window constants
 #define WINDOW_WIDTH 800
@@ -175,6 +179,7 @@ typedef enum
    SCREEN_SELECT_EDIT,
    SCREEN_SELECT_PLAY,
    SCREEN_LEVEL_EDITOR,
+   SCREEN_TEST_PLAY,
    SCREEN_GAME_LEVEL,
    SCREEN_VICTORY,
    SCREEN_DEATH
@@ -746,33 +751,87 @@ static inline bool UiListIsActivatePressed(void)
    return IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
+// Any input relevant anywhere (menu, editor, gameplay)
+static bool AnyInputDown(void)
+{
+   bool anyKeyHeld =
+       IsKeyDown(KEY_ENTER) || IsKeyDown(KEY_SPACE) || IsKeyDown(KEY_ESCAPE) ||
+       IsKeyDown(KEY_UP)    || IsKeyDown(KEY_DOWN)  || IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT) ||
+       IsKeyDown(KEY_W)     || IsKeyDown(KEY_A)     || IsKeyDown(KEY_S)    || IsKeyDown(KEY_D)     ||
+       IsKeyDown(KEY_TAB)   ||
+       IsKeyDown(KEY_ONE)   || IsKeyDown(KEY_TWO)   || IsKeyDown(KEY_THREE) || IsKeyDown(KEY_FOUR) || IsKeyDown(KEY_FIVE);
+   bool anyMouseHeld = IsMouseButtonDown(MOUSE_LEFT_BUTTON) ||
+                       IsMouseButtonDown(MOUSE_RIGHT_BUTTON) ||
+                       IsMouseButtonDown(MOUSE_MIDDLE_BUTTON);
+   return anyKeyHeld || anyMouseHeld;
+}
+
+static inline void InputGate_RequestBlockOnce(void)
+{
+   gInputGate = IG_BLOCK_ONCE;
+}
+
+// Returns true if input should be ignored this frame due to gate state.
+static inline bool InputGate_BeginFrameBlocked(void)
+{
+   if (gInputGate == IG_BLOCK_ONCE || gInputGate == IG_LATCHED)
+   {
+      if (AnyInputDown()) return true;   // keep blocking while anything is held
+      gInputGate = IG_FREE;              // clear when everything is released
+      return false;
+   }
+   return false;
+}
+
+static inline void InputGate_LatchIfEdgeOccurred(bool edgePressed)
+{
+   if (edgePressed ||
+       IsMouseButtonPressed(MOUSE_LEFT_BUTTON) ||
+       IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) ||
+       IsMouseButtonPressed(MOUSE_MIDDLE_BUTTON))
+   {
+      gInputGate = IG_LATCHED;
+   }
+}
+
 // Updates selected index by keyboard/mouse and reports activation
 static void UiListHandle(const UiListSpec *spec, int *selected, int itemCount, bool *outActivated)
 {
-   // arrows + WASD cyclic navigation
-   if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))
+   if (InputGate_BeginFrameBlocked()) { if (outActivated) *outActivated = false; return; }
+
+   // arrows + WASD cyclic navigation (edge-only)
+   bool pressDown = IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S);
+   bool pressUp   = IsKeyPressed(KEY_UP)   || IsKeyPressed(KEY_W);
+   bool pressLeft = IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A);
+   bool pressRight= IsKeyPressed(KEY_RIGHT)|| IsKeyPressed(KEY_D);
+
+   if (pressDown)
    {
       (*selected)++;
       if (*selected >= itemCount)
          *selected = (itemCount > 0 ? 0 : 0);
    }
-   if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))
+   if (pressUp)
    {
       (*selected)--;
       if (*selected < 0)
          *selected = (itemCount > 0 ? itemCount - 1 : 0);
    }
 
-   // mouse hover selects
+   // mouse hover selects (does not latch; hover isn't a press)
    Vector2 m = GetMousePosition();
    int hover = UiListIndexAtMouse(m, spec, itemCount);
    if (hover != -1)
       *selected = hover;
 
-   // activation
-   bool activated = (itemCount > 0) && UiListIsActivatePressed();
+   // activation (edge-only)
+   bool pressedActivate = UiListIsActivatePressed();
+   bool activated = (itemCount > 0) && pressedActivate;
    if (outActivated)
       *outActivated = activated;
+
+   // Latch if any actionable press occurred this frame (nav or activation or mouse button press)
+   InputGate_LatchIfEdgeOccurred(pressDown || pressUp || pressLeft || pressRight || pressedActivate);
 }
 
 typedef const char *(*LabelAtFn)(int index, void *ud);
@@ -918,6 +977,7 @@ void CreateDefaultLevel(GameState *game, LevelEditorState *ed)
 
 void UpdateLevelEditor(ScreenState *screen, GameState *game)
 {
+   if (InputGate_BeginFrameBlocked()) return;
    // Switch tool with Tab
    if (IsKeyPressed(KEY_TAB))
    {
@@ -1033,7 +1093,17 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game)
    if (IsKeyPressed(KEY_ESCAPE))
    {
       SaveLevelBinary(game, &editor);
+      InputGate_RequestBlockOnce();
       *screen = SCREEN_MENU;
+   }
+
+   // Quick test: save and run the level when Enter is pressed
+   if (IsKeyPressed(KEY_ENTER))
+   {
+      SaveLevelBinary(game, &editor);
+      victory = false;
+      death = false;
+      *screen = SCREEN_TEST_PLAY;
    }
 }
 
@@ -1067,10 +1137,12 @@ void UpdateGame(GameState *game)
 {
    if (victory || death)
       return;
+   if (InputGate_BeginFrameBlocked()) return;
 
    float dt = GetFrameTime();
    if (dt > 0.033f)
       dt = 0.033f; // clamp big frames for stability
+   bool didGroundJumpThisFrame = false;
 
    // Decrement timers
    if (game->coyoteTimer > 0.0f)
@@ -1144,6 +1216,7 @@ void UpdateGame(GameState *game)
       if ((game->onGround || game->coyoteTimer > 0.0f) && game->jumpBufferTimer > 0.0f)
       {
          game->playerVel.y = JUMP_SPEED;
+         didGroundJumpThisFrame = true;  // mark that we initiated a jump from ground/coyote
          game->onGround = false;
          game->coyoteTimer = 0.0f;
          game->jumpBufferTimer = 0.0f;
@@ -1151,8 +1224,8 @@ void UpdateGame(GameState *game)
       }
    }
 
-   // Wall jump: if airborne, touching a wall, and jump was just pressed
-   if (!game->crouching && !game->onGround && (touchingLeft || touchingRight) && wantJumpPress)
+   // Wall jump: only if airborne and NOT the same frame as a ground jump
+   if (!game->crouching && !game->onGround && !didGroundJumpThisFrame && (touchingLeft || touchingRight) && wantJumpPress)
    {
       game->playerVel.y = JUMP_SPEED;
       if (touchingLeft)
@@ -1344,6 +1417,7 @@ int main(void)
          ScanLevels(&gCatalog);
          if (IsKeyPressed(KEY_ESCAPE))
          {
+            InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
             break;
          }
@@ -1367,6 +1441,7 @@ int main(void)
          ScanLevels(&gCatalog);
          if (IsKeyPressed(KEY_ESCAPE))
          {
+            InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
             break;
          }
@@ -1427,6 +1502,70 @@ int main(void)
          break;
       }
 
+      case SCREEN_TEST_PLAY:
+      {
+         // Load current level from disk if needed (use the same loader as gameplay)
+         if (!gameLevelLoaded)
+         {
+            bool loaded = LoadLevelBinary(&game, &editor);
+            if (!loaded)
+            {
+               CreateDefaultLevel(&game, &editor);
+            }
+            gameLevelLoaded = true;
+         }
+         // Frame-level input block: still render, skip update/inputs
+         if (InputGate_BeginFrameBlocked())
+         {
+             BeginDrawing();
+             ClearBackground(RAYWHITE);
+             RenderGame(&game);
+             EndDrawing();
+             break;
+         }
+         // During test play, ESC returns to the editor instead of the main menu
+         if (IsKeyPressed(KEY_ESCAPE))
+         {
+            InputGate_RequestBlockOnce(); // prevent ESC from triggering Editor's ESC handler
+            // Restore player position from the level's TILE_PLAYER
+            Vector2 p = game.playerPos;
+            FindTileWorldPos(&editor, TILE_PLAYER, &p);
+            game.playerPos = p;
+            screen = SCREEN_LEVEL_EDITOR;
+            // Reset transient flags and allow editing to continue
+            victory = false;
+            death = false;
+            break;
+         }
+         UpdateGame(&game);
+         if (death)
+         {
+            // In test play: return directly to editor on death
+            Vector2 p = game.playerPos;
+            FindTileWorldPos(&editor, TILE_PLAYER, &p);
+            game.playerPos = p;
+            screen = SCREEN_LEVEL_EDITOR;
+            victory = false;
+            death = false;
+            break;
+         }
+         BeginDrawing();
+         ClearBackground(RAYWHITE);
+         RenderGame(&game);
+         EndDrawing();
+         if (victory)
+         {
+            // In test play: return directly to editor on victory
+            Vector2 p = game.playerPos;
+            FindTileWorldPos(&editor, TILE_PLAYER, &p);
+            game.playerPos = p;
+            screen = SCREEN_LEVEL_EDITOR;
+            victory = false;
+            death = false;
+         }
+         break;
+      }
+
       case SCREEN_GAME_LEVEL:
       {
          if (!gameLevelLoaded)
@@ -1438,8 +1577,18 @@ int main(void)
             }
             gameLevelLoaded = true;
          }
+         // Frame-level input block: still render, skip update/inputs
+         if (InputGate_BeginFrameBlocked())
+         {
+             BeginDrawing();
+             ClearBackground(RAYWHITE);
+             RenderGame(&game);
+             EndDrawing();
+             break;
+         }
          if (IsKeyPressed(KEY_ESCAPE))
          {
+            InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
             break;
          }
@@ -1468,6 +1617,7 @@ int main(void)
          EndDrawing();
          if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
          {
+            InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
          }
          break;
@@ -1481,6 +1631,7 @@ int main(void)
          EndDrawing();
          if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE))
          {
+            InputGate_RequestBlockOnce();
             screen = SCREEN_MENU;
          }
          break;
