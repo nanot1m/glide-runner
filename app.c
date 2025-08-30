@@ -12,16 +12,6 @@
 #include "screens.h"
 #include "ui.h"
 
-#ifdef PLATFORM_WEB
-#include <emscripten/emscripten.h>
-EM_JS(void, ensure_canvas_focus, (), {
-	if (typeof Module != = 'undefined' && Module.canvas) {
-		Module.canvas.tabIndex = 0;
-		if (document.activeElement != = Module.canvas) Module.canvas.focus();
-	}
-});
-#endif
-
 static const UiListSpec LIST_SPEC = {.startY = 70.0f, .stepY = 30.0f, .itemHeight = 24.0f, .fontSize = 24};
 
 static LevelCatalog gCatalog;
@@ -54,11 +44,6 @@ int main(void) {
 	SetExitKey(0);
 	SetTargetFPS(120);
 
-#ifdef PLATFORM_WEB
-	// Ensure the Web canvas is focusable and focused so Space/Enter/Escape work
-	ensure_canvas_focus();
-#endif
-
 	GameState game = {0};
 	game.playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
 	game.playerVel = (Vector2){0, 0};
@@ -72,10 +57,6 @@ int main(void) {
 	bool gameLevelLoaded = false;
 
 	while (!WindowShouldClose()) {
-#ifdef PLATFORM_WEB
-		// Keep canvas focused in case focus was lost on transitions
-		ensure_canvas_focus();
-#endif
 		switch (screen) {
 		case SCREEN_MENU:
 			UpdateMenu(&screen, &menuSelected);

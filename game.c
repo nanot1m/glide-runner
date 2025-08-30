@@ -25,8 +25,8 @@ static bool AABBOverlapsSolid(float x, float y, float w, float h) {
 	return false;
 }
 
-static void ResolveAxis(float *pos, float *vel, float other, float w, float h, bool vertical) {
-	float remaining = *vel * GetFrameTime();
+static void ResolveAxis(float *pos, float *vel, float other, float w, float h, bool vertical, float dt) {
+	float remaining = *vel * dt;
 	if (remaining == 0.0f) return;
 	float sign = (remaining > 0) ? 1.0f : -1.0f;
 	while (remaining != 0.0f) {
@@ -123,14 +123,24 @@ void UpdateGame(GameState *game) {
 	float aabbH = game->crouching ? PLAYER_H_CROUCH : PLAYER_H;
 
 	float accel = game->onGround ? MOVE_ACCEL : AIR_ACCEL;
-	if (left && !right)
-		game->playerVel.x -= accel * dt;
-	else if (right && !left)
-		game->playerVel.x += accel * dt;
-	else if (game->onGround)
-		game->playerVel.x *= game->crouching ? CROUCH_FRICTION : GROUND_FRICTION;
-	else
-		game->playerVel.x *= AIR_FRICTION;
+	bool accelApplied = false;
+	if (!game->crouching) {
+		if (left && !right) {
+			game->playerVel.x -= accel * dt;
+			accelApplied = true;
+		} else if (right && !left) {
+			game->playerVel.x += accel * dt;
+			accelApplied = true;
+		}
+	}
+	if (!accelApplied && game->onGround) {
+		float frames = dt / BASE_DT;
+		float fr = game->crouching ? CROUCH_FRICTION : GROUND_FRICTION;
+		if (frames > 0.0f) game->playerVel.x *= powf(fr, frames);
+	} else if (!accelApplied) {
+		float frames = dt / BASE_DT;
+		if (frames > 0.0f) game->playerVel.x *= powf(AIR_FRICTION, frames);
+	}
 
 	if (game->playerVel.x > maxSpeedX) game->playerVel.x = maxSpeedX;
 	if (game->playerVel.x < -maxSpeedX) game->playerVel.x = -maxSpeedX;
@@ -165,8 +175,8 @@ void UpdateGame(GameState *game) {
 
 	float newX = game->playerPos.x;
 	float newY = game->playerPos.y;
-	ResolveAxis(&newX, &game->playerVel.x, newY, PLAYER_W, aabbH, false);
-	ResolveAxis(&newY, &game->playerVel.y, newX, PLAYER_W, aabbH, true);
+	ResolveAxis(&newX, &game->playerVel.x, newY, PLAYER_W, aabbH, false, dt);
+	ResolveAxis(&newY, &game->playerVel.y, newX, PLAYER_W, aabbH, true, dt);
 	bool wasGround = game->onGround;
 	game->onGround = false;
 

@@ -5,6 +5,10 @@
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 
+// Timing
+#define BASE_FPS 120.0f
+#define BASE_DT (1.0f / BASE_FPS)
+
 // Grid / tiles
 #define SQUARE_SIZE 20
 #define GRID_COLS (WINDOW_WIDTH / SQUARE_SIZE)
