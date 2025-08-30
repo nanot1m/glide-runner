@@ -1002,7 +1002,11 @@ static void UiListRenderCB(const UiListSpec *spec, int selected, int itemCount, 
    {
       Rectangle r = UiListItemRect(spec, i);
       if (hover == i)
-         DrawRectangleRec(r, (Color){230, 230, 230, 255});
+      {
+         Rectangle hr = r;
+         hr.y -= 2; // start hover rect 2px higher
+         DrawRectangleRec(hr, (Color){230, 230, 230, 255});
+      }
       Color c = (selected == i) ? RED : BLUE;
       const char *label = labelAt ? labelAt(i, ud) : "";
       DrawText(label, (int)r.x, (int)r.y, spec->fontSize, c);
@@ -1582,9 +1586,15 @@ int main(void)
             break;
          }
          bool activate = false;
+         int prevIndex = gCatalogIndex;
          UiListHandle(&LIST_SPEC, &gCatalogIndex, gCatalog.count, &activate);
+         if (gCatalogIndex != prevIndex)
+         {
+            if (sfxHoverLoaded) PlaySound(sfxHover);
+         }
          if (activate && gCatalog.count > 0)
          {
+            if (sfxMenuLoaded) PlaySound(sfxMenu);
             snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", gCatalog.items[gCatalogIndex].binPath);
             editorLoaded = false;
             screen = SCREEN_LEVEL_EDITOR;
@@ -1606,9 +1616,15 @@ int main(void)
             break;
          }
          bool activate = false;
+         int prevIndex = gCatalogIndex;
          UiListHandle(&LIST_SPEC, &gCatalogIndex, gCatalog.count, &activate);
+         if (gCatalogIndex != prevIndex)
+         {
+            if (sfxHoverLoaded) PlaySound(sfxHover);
+         }
          if (activate && gCatalog.count > 0)
          {
+            if (sfxMenuLoaded) PlaySound(sfxMenu);
             snprintf(gLevelBinPath, sizeof(gLevelBinPath), "%s", gCatalog.items[gCatalogIndex].binPath);
             gameLevelLoaded = false;
             screen = SCREEN_GAME_LEVEL;
