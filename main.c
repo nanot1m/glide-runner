@@ -14,6 +14,95 @@
 #include <errno.h>
 #include <math.h>
 
+// ---- Audio (optional if you add .wav files to ./assets) ----
+static Sound sfxJump, sfxVictory, sfxDeath, sfxMenu;
+static bool sfxJumpLoaded = false, sfxVictoryLoaded = false, sfxDeathLoaded = false, sfxMenuLoaded = false;
+
+static Sound sfxHover; 
+static bool sfxHoverLoaded = false;
+
+static Music musicMenu;
+
+static bool musicMenuLoaded = false;
+static bool musicMenuPlaying = false;
+// Menu music fade params
+#define MENU_MUSIC_VOL 0.6f
+#define MENU_MUSIC_FADE 1.5f  // volume units per second
+static float musicMenuVol = 0.0f;
+static float musicMenuTargetVol = MENU_MUSIC_VOL;
+
+static bool LoadSoundIfExists(const char *path, Sound *out)
+{
+   if (FileExists(path))
+   {
+      *out = LoadSound(path);
+      return true;
+   }
+   return false;
+}
+
+static bool LoadMusicIfExists(const char *path, Music *out)
+{
+   if (FileExists(path))
+   {
+      *out = LoadMusicStream(path);
+      return true;
+   }
+   return false;
+}
+
+static void LoadAllSfx(void)
+{
+   // Expect files in ./assets (you can rename these if needed)
+   sfxJumpLoaded = LoadSoundIfExists("assets/jump.wav", &sfxJump);
+   sfxVictoryLoaded = LoadSoundIfExists("assets/victory.wav", &sfxVictory);
+   sfxDeathLoaded = LoadSoundIfExists("assets/death.wav", &sfxDeath);
+   sfxMenuLoaded = LoadSoundIfExists("assets/menu.wav", &sfxMenu);
+   sfxHoverLoaded = LoadSoundIfExists("assets/hover.wav", &sfxHover);
+}
+
+static void UnloadAllSfx(void)
+{
+   if (sfxJumpLoaded) UnloadSound(sfxJump);
+   if (sfxVictoryLoaded) UnloadSound(sfxVictory);
+   if (sfxDeathLoaded) UnloadSound(sfxDeath);
+   if (sfxMenuLoaded) UnloadSound(sfxMenu);
+   if (sfxHoverLoaded) UnloadSound(sfxHover);
+}
+
+static void LoadMenuMusic(void)
+{
+   // Try a default path; you can change the filename/format
+   musicMenuLoaded = LoadMusicIfExists("assets/menu.mp3", &musicMenu);
+   if (musicMenuLoaded)
+   {
+      musicMenu.looping = true; // loop in menu
+      SetMusicVolume(musicMenu, 0.0f); // start silent, we'll fade in
+      musicMenuVol = 0.0f;
+      musicMenuTargetVol = MENU_MUSIC_VOL;
+   }
+}
+
+static void UnloadMenuMusic(void)
+{
+   if (musicMenuLoaded)
+   {
+      if (musicMenuPlaying) StopMusicStream(musicMenu);
+      UnloadMusicStream(musicMenu);
+      musicMenuLoaded = false;
+      musicMenuPlaying = false;
+   }
+}
+
+static void PrimeSfxWarmup(void)
+{
+   // Play-and-stop each loaded sound at zero volume to warm up the mixer/device
+   if (sfxJumpLoaded)   { SetSoundVolume(sfxJump, 0.0f);   PlaySound(sfxJump);   StopSound(sfxJump);   SetSoundVolume(sfxJump, 1.0f); }
+   if (sfxVictoryLoaded){ SetSoundVolume(sfxVictory, 0.0f); PlaySound(sfxVictory); StopSound(sfxVictory); SetSoundVolume(sfxVictory, 1.0f); }
+   if (sfxDeathLoaded)  { SetSoundVolume(sfxDeath, 0.0f);  PlaySound(sfxDeath);  StopSound(sfxDeath);  SetSoundVolume(sfxDeath, 1.0f); }
+   if (sfxMenuLoaded)   { SetSoundVolume(sfxMenu, 0.0f);   PlaySound(sfxMenu);   StopSound(sfxMenu);   SetSoundVolume(sfxMenu, 1.0f); }
+}
+
 // Global victory flag
 static bool victory = false;
 static bool death = false;
@@ -739,10 +828,16 @@ static const char *CatalogLabelAtCB(int i, void *ud)
 // Update menu logic
 void UpdateMenu(ScreenState *screen, int *selected)
 {
+   int prev = *selected;
    bool activate = false;
    UiListHandle(&MENU_SPEC, selected, MENU_OPTION_COUNT, &activate);
+   if (*selected != prev)
+   {
+      if (sfxHoverLoaded) PlaySound(sfxHover);
+   }
    if (activate)
    {
+      if (sfxMenuLoaded) PlaySound(sfxMenu);
       if (*selected == MENU_EDIT_EXISTING)
       {
          *screen = SCREEN_SELECT_EDIT;
@@ -1052,6 +1147,7 @@ void UpdateGame(GameState *game)
          game->onGround = false;
          game->coyoteTimer = 0.0f;
          game->jumpBufferTimer = 0.0f;
+         if (sfxJumpLoaded) PlaySound(sfxJump);
       }
    }
 
@@ -1063,6 +1159,7 @@ void UpdateGame(GameState *game)
          game->playerVel.x = WALL_JUMP_PUSH_X; // push to the right
       if (touchingRight)
          game->playerVel.x = -WALL_JUMP_PUSH_X; // push to the left
+      if (sfxJumpLoaded) PlaySound(sfxJump);
    }
 
    // Gravity
@@ -1156,6 +1253,7 @@ void UpdateGame(GameState *game)
    if (CheckCollisionRecs(PlayerAABB(game), ExitAABB(game)))
    {
       victory = true;
+      if (sfxVictoryLoaded) PlaySound(sfxVictory);
    }
 
    // Death: if player's AABB overlaps any laser trap stripe
@@ -1171,6 +1269,7 @@ void UpdateGame(GameState *game)
                if (CheckCollisionRecs(pb, lr))
                {
                   death = true;
+                  if (sfxDeathLoaded) PlaySound(sfxDeath);
                   break;
                }
             }
@@ -1199,6 +1298,13 @@ int main(void)
 {
    // Initialize window (width, height, title)
    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Empty Window");
+   // Reduce audio buffering to lower latency (call BEFORE InitAudioDevice)
+   SetAudioStreamBufferSizeDefault(512); // try 256–1024; smaller = lower latency, more CPU risk
+   InitAudioDevice();
+   SetMasterVolume(0.8f); // tweak to taste
+   LoadAllSfx();
+   PrimeSfxWarmup();
+   LoadMenuMusic();
    SetExitKey(0); // Disable default Esc-to-close behavior
    SetTargetFPS(120);
 
@@ -1389,8 +1495,52 @@ int main(void)
          victory = false;
          death = false;
       }
+
+      // --- Menu music control with fade: play on all non-game screens, fade out only during gameplay ---
+      if (musicMenuLoaded)
+      {
+         bool inMenuScreens = (screen == SCREEN_MENU || screen == SCREEN_SELECT_EDIT || screen == SCREEN_SELECT_PLAY || screen == SCREEN_LEVEL_EDITOR);
+         float dt = GetFrameTime();
+         // Ensure playback state
+         if (inMenuScreens)
+         {
+            if (!musicMenuPlaying) { PlayMusicStream(musicMenu); musicMenuPlaying = true; }
+            musicMenuTargetVol = MENU_MUSIC_VOL;
+         }
+         else
+         {
+            // In gameplay: fade to 0, then stop
+            musicMenuTargetVol = 0.0f;
+         }
+
+         // Step volume toward target
+         if (musicMenuVol < musicMenuTargetVol)
+         {
+            musicMenuVol += MENU_MUSIC_FADE * dt;
+            if (musicMenuVol > musicMenuTargetVol) musicMenuVol = musicMenuTargetVol;
+         }
+         else if (musicMenuVol > musicMenuTargetVol)
+         {
+            musicMenuVol -= MENU_MUSIC_FADE * dt;
+            if (musicMenuVol < musicMenuTargetVol) musicMenuVol = musicMenuTargetVol;
+         }
+
+         // Apply volume and update stream
+         SetMusicVolume(musicMenu, musicMenuVol);
+         if (musicMenuPlaying) UpdateMusicStream(musicMenu);
+
+         // If fully faded out during gameplay, stop the stream
+         if (!inMenuScreens && musicMenuPlaying && musicMenuVol <= 0.001f)
+         {
+            StopMusicStream(musicMenu);
+            musicMenuPlaying = false;
+         }
+      }
    }
 
+   UnloadAllSfx();
+   UnloadMenuMusic();
+   CloseAudioDevice();
    CloseWindow();
    return 0;
 }
