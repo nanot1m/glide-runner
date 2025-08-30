@@ -18,7 +18,7 @@
 static Sound sfxJump, sfxVictory, sfxDeath, sfxMenu;
 static bool sfxJumpLoaded = false, sfxVictoryLoaded = false, sfxDeathLoaded = false, sfxMenuLoaded = false;
 
-static Sound sfxHover; 
+static Sound sfxHover;
 static bool sfxHoverLoaded = false;
 
 static Music musicMenu;
@@ -27,7 +27,7 @@ static bool musicMenuLoaded = false;
 static bool musicMenuPlaying = false;
 // Menu music fade params
 #define MENU_MUSIC_VOL 0.6f
-#define MENU_MUSIC_FADE 1.5f  // volume units per second
+#define MENU_MUSIC_FADE 1.5f // volume units per second
 static float musicMenuVol = 0.0f;
 static float musicMenuTargetVol = MENU_MUSIC_VOL;
 
@@ -63,11 +63,16 @@ static void LoadAllSfx(void)
 
 static void UnloadAllSfx(void)
 {
-   if (sfxJumpLoaded) UnloadSound(sfxJump);
-   if (sfxVictoryLoaded) UnloadSound(sfxVictory);
-   if (sfxDeathLoaded) UnloadSound(sfxDeath);
-   if (sfxMenuLoaded) UnloadSound(sfxMenu);
-   if (sfxHoverLoaded) UnloadSound(sfxHover);
+   if (sfxJumpLoaded)
+      UnloadSound(sfxJump);
+   if (sfxVictoryLoaded)
+      UnloadSound(sfxVictory);
+   if (sfxDeathLoaded)
+      UnloadSound(sfxDeath);
+   if (sfxMenuLoaded)
+      UnloadSound(sfxMenu);
+   if (sfxHoverLoaded)
+      UnloadSound(sfxHover);
 }
 
 static void LoadMenuMusic(void)
@@ -76,7 +81,7 @@ static void LoadMenuMusic(void)
    musicMenuLoaded = LoadMusicIfExists("assets/menu.mp3", &musicMenu);
    if (musicMenuLoaded)
    {
-      musicMenu.looping = true; // loop in menu
+      musicMenu.looping = true;        // loop in menu
       SetMusicVolume(musicMenu, 0.0f); // start silent, we'll fade in
       musicMenuVol = 0.0f;
       musicMenuTargetVol = MENU_MUSIC_VOL;
@@ -87,7 +92,8 @@ static void UnloadMenuMusic(void)
 {
    if (musicMenuLoaded)
    {
-      if (musicMenuPlaying) StopMusicStream(musicMenu);
+      if (musicMenuPlaying)
+         StopMusicStream(musicMenu);
       UnloadMusicStream(musicMenu);
       musicMenuLoaded = false;
       musicMenuPlaying = false;
@@ -97,10 +103,34 @@ static void UnloadMenuMusic(void)
 static void PrimeSfxWarmup(void)
 {
    // Play-and-stop each loaded sound at zero volume to warm up the mixer/device
-   if (sfxJumpLoaded)   { SetSoundVolume(sfxJump, 0.0f);   PlaySound(sfxJump);   StopSound(sfxJump);   SetSoundVolume(sfxJump, 1.0f); }
-   if (sfxVictoryLoaded){ SetSoundVolume(sfxVictory, 0.0f); PlaySound(sfxVictory); StopSound(sfxVictory); SetSoundVolume(sfxVictory, 1.0f); }
-   if (sfxDeathLoaded)  { SetSoundVolume(sfxDeath, 0.0f);  PlaySound(sfxDeath);  StopSound(sfxDeath);  SetSoundVolume(sfxDeath, 1.0f); }
-   if (sfxMenuLoaded)   { SetSoundVolume(sfxMenu, 0.0f);   PlaySound(sfxMenu);   StopSound(sfxMenu);   SetSoundVolume(sfxMenu, 1.0f); }
+   if (sfxJumpLoaded)
+   {
+      SetSoundVolume(sfxJump, 0.0f);
+      PlaySound(sfxJump);
+      StopSound(sfxJump);
+      SetSoundVolume(sfxJump, 1.0f);
+   }
+   if (sfxVictoryLoaded)
+   {
+      SetSoundVolume(sfxVictory, 0.0f);
+      PlaySound(sfxVictory);
+      StopSound(sfxVictory);
+      SetSoundVolume(sfxVictory, 1.0f);
+   }
+   if (sfxDeathLoaded)
+   {
+      SetSoundVolume(sfxDeath, 0.0f);
+      PlaySound(sfxDeath);
+      StopSound(sfxDeath);
+      SetSoundVolume(sfxDeath, 1.0f);
+   }
+   if (sfxMenuLoaded)
+   {
+      SetSoundVolume(sfxMenu, 0.0f);
+      PlaySound(sfxMenu);
+      StopSound(sfxMenu);
+      SetSoundVolume(sfxMenu, 1.0f);
+   }
 }
 
 // Global victory flag
@@ -117,7 +147,12 @@ static char gLevelBinPath[260] = LEVEL_FILE_BIN;
 static bool gCreateNewRequested = false;
 // One-shot input block when entering menu to avoid carry-over presses/clicks
 // Unified input gate for debouncing across the whole app
-typedef enum { IG_FREE = 0, IG_BLOCK_ONCE = 1, IG_LATCHED = 2 } InputGateState;
+typedef enum
+{
+   IG_FREE = 0,
+   IG_BLOCK_ONCE = 1,
+   IG_LATCHED = 2
+} InputGateState;
 static InputGateState gInputGate = IG_FREE;
 
 // Window constants
@@ -391,9 +426,30 @@ static inline Rectangle ExitAABB(const GameState *g)
    return (Rectangle){g->exitPos.x, g->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE};
 }
 
+// Tile rectangle helper (world-space rect for a tile cell)
+static inline Rectangle TileRect(int cx, int cy)
+{
+   return (Rectangle){CellToWorld(cx), CellToWorld(cy), (float)SQUARE_SIZE, (float)SQUARE_SIZE};
+}
+
+// Laser visual/physics parameters
+#define LASER_STRIPE_THICKNESS 3.0f
+#define LASER_STRIPE_OFFSET 1.0f
+
 static inline Rectangle LaserStripeRect(Vector2 laserPos)
 {
-   return (Rectangle){laserPos.x, laserPos.y + 1.0f, (float)SQUARE_SIZE, 3.0f};
+   return (Rectangle){laserPos.x, laserPos.y + LASER_STRIPE_OFFSET, (float)SQUARE_SIZE, LASER_STRIPE_THICKNESS};
+}
+
+// ---- Tile classification helpers ----
+static inline bool IsSolidTile(TileType t)
+{
+   return (t == TILE_BLOCK);
+}
+
+static inline bool IsHazardTile(TileType t)
+{
+   return (t == TILE_LASER);
 }
 
 // Draw all solid tiles (blocks) and laser stripes used by both editor and game
@@ -404,13 +460,14 @@ static void RenderTiles(const LevelEditorState *ed)
       for (int x = 0; x < GRID_COLS; ++x)
       {
          TileType t = ed->tiles[y][x];
-         if (t == TILE_BLOCK)
+         if (IsSolidTile(t))
          {
-            DrawRectangle(CellToWorld(x), CellToWorld(y), SQUARE_SIZE, SQUARE_SIZE, GRAY);
+            Rectangle r = TileRect(x, y);
+            DrawRectangleRec(r, GRAY);
          }
-         else if (t == TILE_LASER)
+         else if (IsHazardTile(t))
          {
-            Rectangle lr = (Rectangle){CellToWorld(x), CellToWorld(y) + 1.0f, (float)SQUARE_SIZE, 3.0f};
+            Rectangle lr = LaserStripeRect((Vector2){CellToWorld(x), CellToWorld(y)});
             DrawRectangleRec(lr, RED);
          }
       }
@@ -481,7 +538,7 @@ static bool BlockAtCell(int cx, int cy)
    // Treat out of bounds as solid
    if (!InBoundsCell(cx, cy))
       return true;
-   return editor.tiles[cy][cx] == TILE_BLOCK; // only blocks are solid
+   return IsSolidTile(editor.tiles[cy][cx]);
 }
 
 // Check if any grid cell overlapped by an AABB is solid
@@ -547,6 +604,25 @@ static void ResolveAxis(float *pos, float *vel, float other, float w, float h, b
       }
       remaining -= step;
    }
+}
+
+// Check if player's AABB overlaps any hazard tile (e.g., laser stripes)
+static bool PlayerTouchesHazard(const GameState *g)
+{
+   Rectangle pb = PlayerAABB(g);
+   for (int y = 0; y < GRID_ROWS; ++y)
+   {
+      for (int x = 0; x < GRID_COLS; ++x)
+      {
+         TileType t = editor.tiles[y][x];
+         if (!IsHazardTile(t))
+            continue;
+         Rectangle lr = LaserStripeRect((Vector2){CellToWorld(x), CellToWorld(y)});
+         if (CheckCollisionRecs(pb, lr))
+            return true;
+      }
+   }
+   return false;
 }
 
 bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed)
@@ -720,6 +796,13 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed)
    return true;
 }
 
+static inline void RestorePlayerPosFromTile(const LevelEditorState *ed, GameState *game)
+{
+   Vector2 p = game->playerPos;
+   FindTileWorldPos(ed, TILE_PLAYER, &p);
+   game->playerPos = p;
+}
+
 // --- Generalized UI list (mouse + WASD/Arrows) ---
 typedef struct
 {
@@ -728,6 +811,11 @@ typedef struct
    float itemHeight; // height of hover rect
    int fontSize;     // text size
 } UiListSpec;
+
+// Hover suppression state: when the user navigates via keyboard, temporarily
+// disable hover selection/visuals until the mouse moves again.
+static bool gUiSuppressHover = false;
+static Vector2 gUiLastMouse = { -9999.0f, -9999.0f };
 
 static Rectangle UiListItemRect(const UiListSpec *spec, int index)
 {
@@ -746,9 +834,11 @@ static int UiListIndexAtMouse(Vector2 m, const UiListSpec *spec, int itemCount)
    return -1;
 }
 
-static inline bool UiListIsActivatePressed(void)
+// Activation helper: keyboard activation is always allowed; mouse activation
+// should only happen if the cursor is over a list item (handled in UiListHandle).
+static inline bool UiListIsKeyActivatePressed(void)
 {
-   return IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+   return IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
 }
 
 // Any input relevant anywhere (menu, editor, gameplay)
@@ -756,10 +846,10 @@ static bool AnyInputDown(void)
 {
    bool anyKeyHeld =
        IsKeyDown(KEY_ENTER) || IsKeyDown(KEY_SPACE) || IsKeyDown(KEY_ESCAPE) ||
-       IsKeyDown(KEY_UP)    || IsKeyDown(KEY_DOWN)  || IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT) ||
-       IsKeyDown(KEY_W)     || IsKeyDown(KEY_A)     || IsKeyDown(KEY_S)    || IsKeyDown(KEY_D)     ||
-       IsKeyDown(KEY_TAB)   ||
-       IsKeyDown(KEY_ONE)   || IsKeyDown(KEY_TWO)   || IsKeyDown(KEY_THREE) || IsKeyDown(KEY_FOUR) || IsKeyDown(KEY_FIVE);
+       IsKeyDown(KEY_UP) || IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT) ||
+       IsKeyDown(KEY_W) || IsKeyDown(KEY_A) || IsKeyDown(KEY_S) || IsKeyDown(KEY_D) ||
+       IsKeyDown(KEY_TAB) ||
+       IsKeyDown(KEY_ONE) || IsKeyDown(KEY_TWO) || IsKeyDown(KEY_THREE) || IsKeyDown(KEY_FOUR) || IsKeyDown(KEY_FIVE);
    bool anyMouseHeld = IsMouseButtonDown(MOUSE_LEFT_BUTTON) ||
                        IsMouseButtonDown(MOUSE_RIGHT_BUTTON) ||
                        IsMouseButtonDown(MOUSE_MIDDLE_BUTTON);
@@ -776,8 +866,9 @@ static inline bool InputGate_BeginFrameBlocked(void)
 {
    if (gInputGate == IG_BLOCK_ONCE || gInputGate == IG_LATCHED)
    {
-      if (AnyInputDown()) return true;   // keep blocking while anything is held
-      gInputGate = IG_FREE;              // clear when everything is released
+      if (AnyInputDown())
+         return true;       // keep blocking while anything is held
+      gInputGate = IG_FREE; // clear when everything is released
       return false;
    }
    return false;
@@ -797,13 +888,18 @@ static inline void InputGate_LatchIfEdgeOccurred(bool edgePressed)
 // Updates selected index by keyboard/mouse and reports activation
 static void UiListHandle(const UiListSpec *spec, int *selected, int itemCount, bool *outActivated)
 {
-   if (InputGate_BeginFrameBlocked()) { if (outActivated) *outActivated = false; return; }
+   if (InputGate_BeginFrameBlocked())
+   {
+      if (outActivated)
+         *outActivated = false;
+      return;
+   }
 
    // arrows + WASD cyclic navigation (edge-only)
    bool pressDown = IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S);
-   bool pressUp   = IsKeyPressed(KEY_UP)   || IsKeyPressed(KEY_W);
+   bool pressUp = IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
    bool pressLeft = IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A);
-   bool pressRight= IsKeyPressed(KEY_RIGHT)|| IsKeyPressed(KEY_D);
+   bool pressRight = IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D);
 
    if (pressDown)
    {
@@ -818,14 +914,26 @@ static void UiListHandle(const UiListSpec *spec, int *selected, int itemCount, b
          *selected = (itemCount > 0 ? itemCount - 1 : 0);
    }
 
+   // If any keyboard navigation occurred this frame, suppress hover until
+   // the mouse moves to intentionally re-engage hover behavior.
+   if (pressDown || pressUp || pressLeft || pressRight)
+      gUiSuppressHover = true;
+
    // mouse hover selects (does not latch; hover isn't a press)
    Vector2 m = GetMousePosition();
-   int hover = UiListIndexAtMouse(m, spec, itemCount);
+   // Re-enable hover if the mouse moved.
+   if (m.x != gUiLastMouse.x || m.y != gUiLastMouse.y)
+      gUiSuppressHover = false;
+   gUiLastMouse = m;
+
+   int hover = gUiSuppressHover ? -1 : UiListIndexAtMouse(m, spec, itemCount);
    if (hover != -1)
       *selected = hover;
 
    // activation (edge-only)
-   bool pressedActivate = UiListIsActivatePressed();
+   bool keyActivate = UiListIsKeyActivatePressed();
+   bool mouseActivate = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && (hover != -1);
+   bool pressedActivate = keyActivate || mouseActivate;
    bool activated = (itemCount > 0) && pressedActivate;
    if (outActivated)
       *outActivated = activated;
@@ -849,7 +957,11 @@ static void UiListRenderCB(const UiListSpec *spec, int selected, int itemCount, 
       return;
    }
    Vector2 m = GetMousePosition();
-   int hover = UiListIndexAtMouse(m, spec, itemCount);
+   // Re-enable hover if the mouse moved.
+   if (m.x != gUiLastMouse.x || m.y != gUiLastMouse.y)
+      gUiSuppressHover = false;
+   gUiLastMouse = m;
+   int hover = gUiSuppressHover ? -1 : UiListIndexAtMouse(m, spec, itemCount);
    for (int i = 0; i < itemCount; ++i)
    {
       Rectangle r = UiListItemRect(spec, i);
@@ -892,11 +1004,13 @@ void UpdateMenu(ScreenState *screen, int *selected)
    UiListHandle(&MENU_SPEC, selected, MENU_OPTION_COUNT, &activate);
    if (*selected != prev)
    {
-      if (sfxHoverLoaded) PlaySound(sfxHover);
+      if (sfxHoverLoaded)
+         PlaySound(sfxHover);
    }
    if (activate)
    {
-      if (sfxMenuLoaded) PlaySound(sfxMenu);
+      if (sfxMenuLoaded)
+         PlaySound(sfxMenu);
       if (*selected == MENU_EDIT_EXISTING)
       {
          *screen = SCREEN_SELECT_EDIT;
@@ -977,7 +1091,8 @@ void CreateDefaultLevel(GameState *game, LevelEditorState *ed)
 
 void UpdateLevelEditor(ScreenState *screen, GameState *game)
 {
-   if (InputGate_BeginFrameBlocked()) return;
+   if (InputGate_BeginFrameBlocked())
+      return;
    // Switch tool with Tab
    if (IsKeyPressed(KEY_TAB))
    {
@@ -1137,7 +1252,8 @@ void UpdateGame(GameState *game)
 {
    if (victory || death)
       return;
-   if (InputGate_BeginFrameBlocked()) return;
+   if (InputGate_BeginFrameBlocked())
+      return;
 
    float dt = GetFrameTime();
    if (dt > 0.033f)
@@ -1216,11 +1332,12 @@ void UpdateGame(GameState *game)
       if ((game->onGround || game->coyoteTimer > 0.0f) && game->jumpBufferTimer > 0.0f)
       {
          game->playerVel.y = JUMP_SPEED;
-         didGroundJumpThisFrame = true;  // mark that we initiated a jump from ground/coyote
+         didGroundJumpThisFrame = true; // mark that we initiated a jump from ground/coyote
          game->onGround = false;
          game->coyoteTimer = 0.0f;
          game->jumpBufferTimer = 0.0f;
-         if (sfxJumpLoaded) PlaySound(sfxJump);
+         if (sfxJumpLoaded)
+            PlaySound(sfxJump);
       }
    }
 
@@ -1232,7 +1349,8 @@ void UpdateGame(GameState *game)
          game->playerVel.x = WALL_JUMP_PUSH_X; // push to the right
       if (touchingRight)
          game->playerVel.x = -WALL_JUMP_PUSH_X; // push to the left
-      if (sfxJumpLoaded) PlaySound(sfxJump);
+      if (sfxJumpLoaded)
+         PlaySound(sfxJump);
    }
 
    // Gravity
@@ -1326,30 +1444,16 @@ void UpdateGame(GameState *game)
    if (CheckCollisionRecs(PlayerAABB(game), ExitAABB(game)))
    {
       victory = true;
-      if (sfxVictoryLoaded) PlaySound(sfxVictory);
+      if (sfxVictoryLoaded)
+         PlaySound(sfxVictory);
    }
 
-   // Death: if player's AABB overlaps any laser trap stripe
+   // Death: if player's AABB overlaps any hazard
+   if (PlayerTouchesHazard(game))
    {
-      Rectangle pb = PlayerAABB(game);
-      for (int y = 0; y < GRID_ROWS; ++y)
-      {
-         for (int x = 0; x < GRID_COLS; ++x)
-         {
-            if (editor.tiles[y][x] == TILE_LASER)
-            {
-               Rectangle lr = (Rectangle){CellToWorld(x), CellToWorld(y) + 1.0f, (float)SQUARE_SIZE, 3.0f};
-               if (CheckCollisionRecs(pb, lr))
-               {
-                  death = true;
-                  if (sfxDeathLoaded) PlaySound(sfxDeath);
-                  break;
-               }
-            }
-         }
-         if (death)
-            break;
-      }
+      death = true;
+      if (sfxDeathLoaded)
+         PlaySound(sfxDeath);
    }
 }
 
@@ -1517,20 +1621,17 @@ int main(void)
          // Frame-level input block: still render, skip update/inputs
          if (InputGate_BeginFrameBlocked())
          {
-             BeginDrawing();
-             ClearBackground(RAYWHITE);
-             RenderGame(&game);
-             EndDrawing();
-             break;
+            BeginDrawing();
+            ClearBackground(RAYWHITE);
+            RenderGame(&game);
+            EndDrawing();
+            break;
          }
          // During test play, ESC returns to the editor instead of the main menu
          if (IsKeyPressed(KEY_ESCAPE))
          {
             InputGate_RequestBlockOnce(); // prevent ESC from triggering Editor's ESC handler
-            // Restore player position from the level's TILE_PLAYER
-            Vector2 p = game.playerPos;
-            FindTileWorldPos(&editor, TILE_PLAYER, &p);
-            game.playerPos = p;
+            RestorePlayerPosFromTile(&editor, &game);
             screen = SCREEN_LEVEL_EDITOR;
             // Reset transient flags and allow editing to continue
             victory = false;
@@ -1541,9 +1642,7 @@ int main(void)
          if (death)
          {
             // In test play: return directly to editor on death
-            Vector2 p = game.playerPos;
-            FindTileWorldPos(&editor, TILE_PLAYER, &p);
-            game.playerPos = p;
+            RestorePlayerPosFromTile(&editor, &game);
             screen = SCREEN_LEVEL_EDITOR;
             victory = false;
             death = false;
@@ -1556,9 +1655,7 @@ int main(void)
          if (victory)
          {
             // In test play: return directly to editor on victory
-            Vector2 p = game.playerPos;
-            FindTileWorldPos(&editor, TILE_PLAYER, &p);
-            game.playerPos = p;
+            RestorePlayerPosFromTile(&editor, &game);
             screen = SCREEN_LEVEL_EDITOR;
             victory = false;
             death = false;
@@ -1580,11 +1677,11 @@ int main(void)
          // Frame-level input block: still render, skip update/inputs
          if (InputGate_BeginFrameBlocked())
          {
-             BeginDrawing();
-             ClearBackground(RAYWHITE);
-             RenderGame(&game);
-             EndDrawing();
-             break;
+            BeginDrawing();
+            ClearBackground(RAYWHITE);
+            RenderGame(&game);
+            EndDrawing();
+            break;
          }
          if (IsKeyPressed(KEY_ESCAPE))
          {
@@ -1655,7 +1752,11 @@ int main(void)
          // Ensure playback state
          if (inMenuScreens)
          {
-            if (!musicMenuPlaying) { PlayMusicStream(musicMenu); musicMenuPlaying = true; }
+            if (!musicMenuPlaying)
+            {
+               PlayMusicStream(musicMenu);
+               musicMenuPlaying = true;
+            }
             musicMenuTargetVol = MENU_MUSIC_VOL;
          }
          else
@@ -1668,17 +1769,20 @@ int main(void)
          if (musicMenuVol < musicMenuTargetVol)
          {
             musicMenuVol += MENU_MUSIC_FADE * dt;
-            if (musicMenuVol > musicMenuTargetVol) musicMenuVol = musicMenuTargetVol;
+            if (musicMenuVol > musicMenuTargetVol)
+               musicMenuVol = musicMenuTargetVol;
          }
          else if (musicMenuVol > musicMenuTargetVol)
          {
             musicMenuVol -= MENU_MUSIC_FADE * dt;
-            if (musicMenuVol < musicMenuTargetVol) musicMenuVol = musicMenuTargetVol;
+            if (musicMenuVol < musicMenuTargetVol)
+               musicMenuVol = musicMenuTargetVol;
          }
 
          // Apply volume and update stream
          SetMusicVolume(musicMenu, musicMenuVol);
-         if (musicMenuPlaying) UpdateMusicStream(musicMenu);
+         if (musicMenuPlaying)
+            UpdateMusicStream(musicMenu);
 
          // If fully faded out during gameplay, stop the stream
          if (!inMenuScreens && musicMenuPlaying && musicMenuVol <= 0.001f)
