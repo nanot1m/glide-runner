@@ -143,9 +143,8 @@ bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed) {
 	fclose(f);
 #ifdef __EMSCRIPTEN__
 	EM_ASM({
-		if (typeof FS != = 'undefined' && Module && FS.filesystems.IDBFS) {
-			FS.syncfs(false, function(err) {
-				if (err) console.error('IDBFS sync failed:', err); });
+		if (typeof FS != 'undefined' && Module && FS.filesystems.IDBFS) {
+			FS.syncfs(false, function(err) { if (err) console.error('IDBFS sync failed:', err); });
 		}
 	});
 #endif
