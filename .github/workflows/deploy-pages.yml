@@ -25,6 +25,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Ensure submodules initialized
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
