@@ -30,6 +30,16 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --recursive
 
+      - name: Verify raylib headers (fallback clone if missing)
+        run: |
+          set -euxo pipefail
+          if [ ! -f vendor/raylib/src/raylib.h ]; then
+            echo "raylib.h not found in submodule; cloning upstream as fallback"
+            rm -rf vendor/raylib
+            git clone --depth 1 https://github.com/raysan5/raylib.git vendor/raylib
+          fi
+          test -f vendor/raylib/src/raylib.h
+
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
