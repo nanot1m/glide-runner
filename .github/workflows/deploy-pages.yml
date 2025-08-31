@@ -43,8 +43,8 @@ jobs:
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
-          # Pin a known-good SDK; adjust as needed
-          version: 3.1.56
+          # Pin requested SDK version for emcc
+          version: 4.0.13
 
       - name: Build web
         run: |
