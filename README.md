@@ -1,6 +1,13 @@
-# My C Window — Platformer + Level Editor
+# Glide Runner — 2D Platformer + Level Editor
 
-A small C game built with raylib. Includes a simple tile-based platformer and an in-game level editor.
+Glide Runner is a fast, 2D precision platformer built in C with raylib. It features tight, grid-aligned movement and a built‑in level editor.
+
+## Game Description
+- Fast, 2D precision platformer about flow and timing.
+- Glide through tight spaces and thread around laser traps.
+- Solid blocks shape each arena; route‑finding matters.
+- Reach the glowing exit to clear each level; instant restarts.
+- Built‑in level editor to design, save, and play your own challenges.
 
 ## Prerequisites
 
@@ -44,14 +51,11 @@ Notes:
 - Building for web overwrites the raylib static library in `vendor/raylib/src`. Running `make` again will rebuild the desktop library automatically.
 - You can override `RAYLIB_INC`/`RAYLIB_WEB_LIB_DIR` to point at a different raylib build if desired; defaults point to `vendor/raylib/src`.
 
-## Controls
+## Default Controls
 
-- Menus: WASD/Arrow keys to navigate, Enter/Space to select, Esc to go back
-- Gameplay:
-  - Move: A/D or Left/Right
-  - Jump: Space or W or Up
-  - Crouch: S or Down
-  - Back to menu: Esc
+- Gameplay: Move = A/D or Left/Right; Jump = Space/W/Up; Back = Esc.
+- Menu: Navigate = W/S or Up/Down; Select = Enter/Space; Back = Esc; Mouse can click items.
+- Editor: Move cursor = Mouse or Arrow keys; Place/use tool = Space or Left click; Tools = 1–5, Tab cycles; Save/Back = Esc; Test play = Enter/Space.
 
 ## Level Editor
 
