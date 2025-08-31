@@ -7,7 +7,15 @@
 #include "raylib.h"
 
 // Paths
-#define LEVEL_FILE_BIN "levels/level1.lvl"
+#ifdef PLATFORM_WEB
+#define LEVELS_DIR_READ "levels" // preloaded, read-only
+#define LEVELS_DIR_WRITE "user-levels" // IDBFS-backed, writable
+#else
+#define LEVELS_DIR_READ "levels"
+#define LEVELS_DIR_WRITE "levels"
+#endif
+
+#define LEVEL_FILE_BIN LEVELS_DIR_WRITE "/level1.lvl"
 
 // Tiles/tools
 typedef enum {

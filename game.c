@@ -231,7 +231,8 @@ void RenderGame(const GameState *game) {
 	RenderTiles(&editor);
 	DrawRectangleRec(PlayerAABB(game), BLUE);
 	DrawRectangleRec(ExitAABB(game), GREEN);
-	DrawStats(game);
+	// TODO: show stats in debug builds
+	// DrawStats(game);
 }
 
 bool Game_Victory(void) { return victory; }

@@ -14,7 +14,7 @@ typedef enum {
 
 #define MENU_OPTION_COUNT 3
 typedef enum {
-	MENU_EDIT_EXISTING,
+	MENU_PLAY_LEVEL,
 	MENU_CREATE_NEW,
-	MENU_PLAY_LEVEL
+	MENU_EDIT_EXISTING,
 } MenuOption;

@@ -35,6 +35,7 @@ ehthumbs.db
 build/
 dist/
 web/
+web.zip
 
 # raylib submodule build outputs (kept inside submodule)
 # Note: .gitignore does not apply inside submodules; this is informational.

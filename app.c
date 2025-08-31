@@ -35,7 +35,7 @@ static inline void RestorePlayerPosFromTile(const LevelEditorState *ed, GameStat
 int main(void) {
 	// Request proper scaling on high-DPI displays and enable vsync
 	SetConfigFlags(FLAG_WINDOW_HIGHDPI | FLAG_VSYNC_HINT);
-	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "My C Window");
+	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Glide Runner");
 	SetAudioStreamBufferSizeDefault(1024);
 	InitAudioDevice();
 	SetMasterVolume(0.8f);

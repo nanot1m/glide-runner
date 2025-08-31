@@ -26,8 +26,8 @@ EMCC ?= emcc
 RAYLIB_INC ?= $(RAYLIB_SRC)
 RAYLIB_WEB_LIB_DIR ?= $(RAYLIB_SRC)
 
-WEB_CFLAGS = -I$(RAYLIB_INC) -DPLATFORM_WEB -std=c99 -Wall -Wextra -Wno-unused-parameter -Os -s USE_GLFW=3
-WEB_LDFLAGS = -s WASM=1 -s MIN_WEBGL_VERSION=2 -s MAX_WEBGL_VERSION=2 -s USE_WEBGL2=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_GLFW=3 -s ASYNCIFY -s EXPORTED_RUNTIME_METHODS=['requestFullscreen']
+WEB_CFLAGS = -I$(RAYLIB_INC) -DPLATFORM_WEB -std=gnu99 -Wall -Wextra -Wno-unused-parameter -Os -s USE_GLFW=3
+WEB_LDFLAGS = -s WASM=1 -s MIN_WEBGL_VERSION=2 -s MAX_WEBGL_VERSION=2 -s USE_WEBGL2=1 -s ALLOW_MEMORY_GROWTH=1 -s STACK_SIZE=262144 -s USE_GLFW=3 -s ASYNCIFY -s EXPORTED_RUNTIME_METHODS=['requestFullscreen']
 RAYLIB_WEB_LIB := $(RAYLIB_SRC)/libraylib.web.a
 WEB_LIBS = $(RAYLIB_WEB_LIB)
 WEB_OUTPUT_DIR = web
@@ -59,6 +59,7 @@ web: $(WEB_OBJS)
 	@mkdir -p $(WEB_OUTPUT_DIR)
 	$(EMCC) $(WEB_OBJS) -o $(WEB_OUTPUT_DIR)/index.html $(WEB_LDFLAGS) $(WEB_LIBS) --shell-file $(WEB_SHELL) \
 		--preload-file assets@assets --preload-file levels@levels --preload-file config@config
+	zip -r web.zip web
 
 format:
 	git ls-files '*.c' '*.h' | xargs -n 25 clang-format -i

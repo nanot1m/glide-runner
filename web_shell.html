@@ -25,6 +25,26 @@
         monitorRunDependencies: function(left) {},
       };
 
+      // Mount IDBFS at /user-levels for writable persistence
+      Module.preRun.push(function(){
+        if (typeof FS === 'undefined') return;
+        try {
+          FS.mkdir('/user-levels');
+        } catch (e) {}
+        try {
+          FS.mount(FS.filesystems.IDBFS, {}, '/user-levels');
+        } catch (e) {}
+        if (typeof Module.addRunDependency === 'function') {
+          Module.addRunDependency('syncfs');
+        }
+        FS.syncfs(true, function (err) {
+          if (err) console.error('IDBFS initial sync failed:', err);
+          if (typeof Module.removeRunDependency === 'function') {
+            Module.removeRunDependency('syncfs');
+          }
+        });
+      });
+
       // Keep canvas aspect ratio (fit within viewport, letterbox)
       (function(){
         var baseW = 0, baseH = 0;

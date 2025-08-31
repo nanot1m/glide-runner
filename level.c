@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "game.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #ifndef _WIN32
 #include <dirent.h>
 #include <sys/stat.h>
@@ -53,10 +56,10 @@ bool FindTileWorldPos(const LevelEditorState *ed, TileType v, Vector2 *out) {
 
 void EnsureLevelsDir(void) {
 #ifdef _WIN32
-	if (_mkdir("levels") == -1 && errno != EEXIST) { /* ignore */
+	if (_mkdir(LEVELS_DIR_WRITE) == -1 && errno != EEXIST) { /* ignore */
 	}
 #else
-	if (mkdir("levels", 0755) == -1 && errno != EEXIST) { /* ignore */
+	if (mkdir(LEVELS_DIR_WRITE, 0755) == -1 && errno != EEXIST) { /* ignore */
 	}
 #endif
 }
@@ -138,6 +141,14 @@ bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed) {
 			}
 		}
 	fclose(f);
+#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		if (typeof FS != = 'undefined' && Module && FS.filesystems.IDBFS) {
+			FS.syncfs(false, function(err) {
+				if (err) console.error('IDBFS sync failed:', err); });
+		}
+	});
+#endif
 	return true;
 }
 
@@ -242,23 +253,48 @@ static void CatalogSortByNumber(LevelCatalog *cat) {
 
 void ScanLevels(LevelCatalog *cat) {
 	cat->count = 0;
+
 #ifndef _WIN32
-	DIR *d = opendir("levels");
-	if (d) {
-		struct dirent *ent;
-		while ((ent = readdir(d)) != NULL) {
-			const char *name = ent->d_name;
-			if (!name || name[0] == '.') continue; // skip hidden, "." and ".."
-			size_t len = strlen(name);
-			if (len > 4 && strcmp(name + len - 4, ".lvl") == 0) {
-				LevelEntry *e = &cat->items[cat->count++];
-				snprintf(e->binPath, sizeof(e->binPath), "levels/%s", name);
-				snprintf(e->baseName, sizeof(e->baseName), "%.*s", (int)(len - 4), name);
-				e->textPath[0] = '\0';
-				if (cat->count >= 256) break;
+	// Scan read-only bundled levels
+	{
+		DIR *d = opendir(LEVELS_DIR_READ);
+		if (d) {
+			struct dirent *ent;
+			while ((ent = readdir(d)) != NULL) {
+				const char *name = ent->d_name;
+				if (!name || name[0] == '.') continue;
+				size_t len = strlen(name);
+				if (len > 4 && strcmp(name + len - 4, ".lvl") == 0) {
+					LevelEntry *e = &cat->items[cat->count++];
+					snprintf(e->binPath, sizeof(e->binPath), "%s/%s", LEVELS_DIR_READ, name);
+					snprintf(e->baseName, sizeof(e->baseName), "%.*s", (int)(len - 4), name);
+					e->textPath[0] = '\0';
+					if (cat->count >= 256) break;
+				}
 			}
+			closedir(d);
 		}
-		closedir(d);
+	}
+
+	// Scan writable user levels (may be same as read dir on desktop)
+	if (strcmp(LEVELS_DIR_WRITE, LEVELS_DIR_READ) != 0) {
+		DIR *d = opendir(LEVELS_DIR_WRITE);
+		if (d) {
+			struct dirent *ent;
+			while ((ent = readdir(d)) != NULL) {
+				const char *name = ent->d_name;
+				if (!name || name[0] == '.') continue;
+				size_t len = strlen(name);
+				if (len > 4 && strcmp(name + len - 4, ".lvl") == 0) {
+					LevelEntry *e = &cat->items[cat->count++];
+					snprintf(e->binPath, sizeof(e->binPath), "%s/%s", LEVELS_DIR_WRITE, name);
+					snprintf(e->baseName, sizeof(e->baseName), "%.*s", (int)(len - 4), name);
+					e->textPath[0] = '\0';
+					if (cat->count >= 256) break;
+				}
+			}
+			closedir(d);
+		}
 	}
 	CatalogSortByNumber(cat);
 #else
@@ -278,5 +314,5 @@ int FindNextLevelIndex(void) {
 }
 
 void MakeLevelPathFromIndex(int index0, char *out, size_t outSz) {
-	snprintf(out, outSz, "levels/level%d.lvl", index0 + 1);
+	snprintf(out, outSz, "%s/level%d.lvl", LEVELS_DIR_WRITE, index0 + 1);
 }

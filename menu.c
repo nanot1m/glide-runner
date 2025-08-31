@@ -7,9 +7,10 @@
 static const UiListSpec MENU_SPEC = {.startY = 70.0f, .stepY = 40.0f, .itemHeight = 28.0f, .fontSize = 24};
 
 static const char *gMenuItems[MENU_OPTION_COUNT] = {
-    "> Edit existing level",
+    "> Play level",
     "> Create new level",
-    "> Play level"};
+    "> Edit existing level",
+};
 
 static const char *MenuLabelAtCB(int i, void *ud) {
 	(void)ud;
