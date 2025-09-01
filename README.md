@@ -14,7 +14,7 @@ Glide Runner is a fast, 2D precision platformer built in C with raylib. It featu
 - A C toolchain: `clang` or `gcc`, and `make`
 - Platform SDK bits that raylib needs (e.g., Xcode Command Line Tools on macOS; X11 dev packages on Linux)
 
-raylib is vendored as a Git submodule under `vendor/raylib` and is built automatically by the Makefile.
+raylib is vendored as a Git submodule under `raylib` and is built automatically by the Makefile.
 
 ## Submodule
 
@@ -48,8 +48,8 @@ Build and serve:
 Notes:
 
 - The web build defines `PLATFORM_WEB` and packages `assets/`, `levels/`, and `config/` for read-only access at runtime.
-- Building for web overwrites the raylib static library in `vendor/raylib/src`. Running `make` again will rebuild the desktop library automatically.
-- You can override `RAYLIB_INC`/`RAYLIB_WEB_LIB_DIR` to point at a different raylib build if desired; defaults point to `vendor/raylib/src`.
+- Building for web overwrites the raylib static library in `raylib/src`. Running `make` again will rebuild the desktop library automatically.
+- You can override `RAYLIB_INC`/`RAYLIB_WEB_LIB_DIR` to point at a different raylib build if desired; defaults point to `raylib/src`.
 
 ## Default Controls
 
