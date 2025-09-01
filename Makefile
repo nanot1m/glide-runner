@@ -1,7 +1,7 @@
 CC = gcc
 
 # raylib submodule paths
-RAYLIB_DIR ?= vendor/raylib
+RAYLIB_DIR ?= raylib
 RAYLIB_SRC := $(RAYLIB_DIR)/src
 RAYLIB_LIB := $(RAYLIB_SRC)/libraylib.a
 
@@ -22,7 +22,7 @@ LIBS = $(RAYLIB_LIB) $(PLATFORM_LIBS)
 # Web (WASM) build settings — requires Emscripten and a raylib web build
 EMCC ?= emcc
 # Override these from the CLI to point at your raylib build for web
-# Example: make web RAYLIB_WEB_LIB_DIR=vendor/raylib/src RAYLIB_INC=vendor/raylib/src
+# Example: make web RAYLIB_WEB_LIB_DIR=raylib/src RAYLIB_INC=raylib/src
 RAYLIB_INC ?= $(RAYLIB_SRC)
 RAYLIB_WEB_LIB_DIR ?= $(RAYLIB_SRC)
 
