@@ -13,8 +13,10 @@ typedef struct GameState {
 	float coyoteTimer; // seconds left to allow jump after leaving ground
 	float jumpBufferTimer; // seconds left to consume buffered jump
 	Vector2 exitPos;
-	bool crouching; // crouch state
-	float groundStickTimer; // seconds to remain grounded after contact
+    bool crouching; // crouch state
+    float groundStickTimer; // seconds to remain grounded after contact
+    bool facingRight; // rendering: last facing direction
+    bool jumpPrevDown; // for variable jump: last-frame jump held
 } GameState;
 
 void UpdateGame(GameState *game);

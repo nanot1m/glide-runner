@@ -41,6 +41,9 @@ all: main
 main: $(OBJS) $(RAYLIB_LIB)
 	$(CC) $(OBJS) -o $@ $(CFLAGS) $(LIBS)
 
+# Rebuild objects when config.h changes (simple dep tracking)
+$(OBJS): config.h
+
 # Build vendored raylib for desktop
 $(RAYLIB_LIB):
 	$(MAKE) -C $(RAYLIB_SRC) clean
@@ -49,6 +52,9 @@ $(RAYLIB_LIB):
 # WebAssembly build (outputs web/index.html + .wasm + .js)
 WEB_SRCS = $(SRCS)
 WEB_OBJS = $(WEB_SRCS:.c=.web.o)
+
+# Ensure web objects also rebuild on config.h changes
+$(WEB_OBJS): config.h
 
 %.web.o: %.c
 	$(EMCC) $(WEB_CFLAGS) -c $< -o $@

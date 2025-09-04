@@ -9,6 +9,7 @@
 #include "level.h"
 #include "menu.h"
 #include "raylib.h"
+#include "render.h"
 #include "screens.h"
 #include "ui.h"
 
@@ -36,6 +37,7 @@ int main(void) {
 	// Request proper scaling on high-DPI displays and enable vsync
 	SetConfigFlags(FLAG_WINDOW_HIGHDPI | FLAG_VSYNC_HINT);
 	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Glide Runner");
+	Render_Init();
 	SetAudioStreamBufferSizeDefault(1024);
 	InitAudioDevice();
 	SetMasterVolume(0.8f);
@@ -45,6 +47,7 @@ int main(void) {
 	SetTargetFPS(120);
 
 	GameState game = {0};
+	game.facingRight = true;
 	game.playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
 	game.playerVel = (Vector2){0, 0};
 	game.exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
@@ -268,6 +271,7 @@ int main(void) {
 
 	Audio_Deinit();
 	CloseAudioDevice();
+	Render_Deinit();
 	CloseWindow();
 	return 0;
 }

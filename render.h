@@ -12,6 +12,12 @@ Rectangle PlayerAABB(const GameState *g);
 Rectangle ExitAABB(const GameState *g);
 Rectangle TileRect(int cx, int cy);
 Rectangle LaserStripeRect(Vector2 laserPos);
+Rectangle LaserCollisionRect(Vector2 laserPos);
 
 void RenderTiles(const LevelEditorState *ed);
 void DrawStats(const GameState *g);
+
+// Sprites and animated rendering
+void Render_Init(void);
+void Render_Deinit(void);
+void RenderPlayer(const GameState *g);

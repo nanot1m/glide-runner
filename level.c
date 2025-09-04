@@ -94,7 +94,7 @@ bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed) {
 	FILE *f = fopen(gLevelBinPath, "wb");
 	if (!f) return false;
 	const char magic[4] = {'L', 'V', 'L', '1'};
-	uint8_t version = 1;
+    uint8_t version = 2; // store player/exit as tile coordinates
 	uint16_t cols = (uint16_t)GRID_COLS, rows = (uint16_t)GRID_ROWS;
 	if (fwrite(magic, 1, 4, f) != 4) {
 		fclose(f);
@@ -112,26 +112,29 @@ bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed) {
 		fclose(f);
 		return false;
 	}
-	Vector2 p = game->playerPos, e = game->exitPos;
-	FindTileWorldPos(ed, TILE_PLAYER, &p);
-	FindTileWorldPos(ed, TILE_EXIT, &e);
-	int32_t px = (int32_t)p.x, py = (int32_t)p.y, ex = (int32_t)e.x, ey = (int32_t)e.y;
-	if (fwrite(&px, sizeof(px), 1, f) != 1) {
-		fclose(f);
-		return false;
-	}
-	if (fwrite(&py, sizeof(py), 1, f) != 1) {
-		fclose(f);
-		return false;
-	}
-	if (fwrite(&ex, sizeof(ex), 1, f) != 1) {
-		fclose(f);
-		return false;
-	}
-	if (fwrite(&ey, sizeof(ey), 1, f) != 1) {
-		fclose(f);
-		return false;
-	}
+    Vector2 p = game->playerPos, e = game->exitPos;
+    FindTileWorldPos(ed, TILE_PLAYER, &p);
+    FindTileWorldPos(ed, TILE_EXIT, &e);
+    uint16_t pcx = (uint16_t)WorldToCellX(p.x);
+    uint16_t pcy = (uint16_t)WorldToCellY(p.y);
+    uint16_t ecx = (uint16_t)WorldToCellX(e.x);
+    uint16_t ecy = (uint16_t)WorldToCellY(e.y);
+    if (fwrite(&pcx, sizeof(pcx), 1, f) != 1) {
+        fclose(f);
+        return false;
+    }
+    if (fwrite(&pcy, sizeof(pcy), 1, f) != 1) {
+        fclose(f);
+        return false;
+    }
+    if (fwrite(&ecx, sizeof(ecx), 1, f) != 1) {
+        fclose(f);
+        return false;
+    }
+    if (fwrite(&ecy, sizeof(ecy), 1, f) != 1) {
+        fclose(f);
+        return false;
+    }
 	for (int y = 0; y < GRID_ROWS; ++y)
 		for (int x = 0; x < GRID_COLS; ++x) {
 			uint8_t t = (uint8_t)ed->tiles[y][x];
@@ -155,7 +158,7 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 	FILE *f = fopen(gLevelBinPath, "rb");
 	if (!f) return false;
 	char magic[4];
-	uint8_t version = 0;
+    uint8_t version = 0;
 	uint16_t cols = 0, rows = 0;
 	if (fread(magic, 1, 4, f) != 4) {
 		fclose(f);
@@ -169,10 +172,7 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 		fclose(f);
 		return false;
 	}
-	if (version != 1) {
-		fclose(f);
-		return false;
-	}
+    if (version != 1 && version != 2) { fclose(f); return false; }
 	if (fread(&cols, sizeof(cols), 1, f) != 1) {
 		fclose(f);
 		return false;
@@ -185,23 +185,23 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 		fclose(f);
 		return false;
 	}
-	int32_t px, py, ex, ey;
-	if (fread(&px, sizeof(px), 1, f) != 1) {
-		fclose(f);
-		return false;
-	}
-	if (fread(&py, sizeof(py), 1, f) != 1) {
-		fclose(f);
-		return false;
-	}
-	if (fread(&ex, sizeof(ex), 1, f) != 1) {
-		fclose(f);
-		return false;
-	}
-	if (fread(&ey, sizeof(ey), 1, f) != 1) {
-		fclose(f);
-		return false;
-	}
+    int32_t px = 0, py = 0, ex = 0, ey = 0;
+    if (version == 1) {
+        if (fread(&px, sizeof(px), 1, f) != 1) { fclose(f); return false; }
+        if (fread(&py, sizeof(py), 1, f) != 1) { fclose(f); return false; }
+        if (fread(&ex, sizeof(ex), 1, f) != 1) { fclose(f); return false; }
+        if (fread(&ey, sizeof(ey), 1, f) != 1) { fclose(f); return false; }
+    } else {
+        uint16_t pcx = 0, pcy = 0, ecx = 0, ecy = 0;
+        if (fread(&pcx, sizeof(pcx), 1, f) != 1) { fclose(f); return false; }
+        if (fread(&pcy, sizeof(pcy), 1, f) != 1) { fclose(f); return false; }
+        if (fread(&ecx, sizeof(ecx), 1, f) != 1) { fclose(f); return false; }
+        if (fread(&ecy, sizeof(ecy), 1, f) != 1) { fclose(f); return false; }
+        px = (int32_t)CellToWorld((int)pcx);
+        py = (int32_t)CellToWorld((int)pcy);
+        ex = (int32_t)CellToWorld((int)ecx);
+        ey = (int32_t)CellToWorld((int)ecy);
+    }
 	for (int y = 0; y < GRID_ROWS; ++y)
 		for (int x = 0; x < GRID_COLS; ++x) ed->tiles[y][x] = TILE_EMPTY;
 	for (int y = 0; y < GRID_ROWS; ++y)
@@ -214,9 +214,9 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 			ed->tiles[y][x] = (TileType)t;
 		}
 	fclose(f);
-	game->playerPos = (Vector2){(float)px, (float)py};
-	game->exitPos = (Vector2){(float)ex, (float)ey};
-	return true;
+    game->playerPos = (Vector2){(float)px, (float)py};
+    game->exitPos = (Vector2){(float)ex, (float)ey};
+    return true;
 }
 
 // ---- Level catalog ----
