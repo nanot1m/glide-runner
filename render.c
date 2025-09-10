@@ -51,6 +51,9 @@ void DrawStats(const GameState *g) {
 
 static Texture2D gIdleTex = {0};
 static Texture2D gRunTex = {0};
+// Pre-flipped left-facing sheets to avoid per-draw flipping artifacts
+static Texture2D gIdleTexL = {0};
+static Texture2D gRunTexL = {0};
 
 // --- Ghost trail state ---
 typedef struct GhostSample {
@@ -70,14 +73,33 @@ static int gGhostCount = 0;
 static float gGhostSampleTimer = 0.0f;
 
 void Render_Init(void) {
-	if (gIdleTex.id == 0) {
-		gIdleTex = LoadTexture("assets/GlideManIdle.png");
-		SetTextureFilter(gIdleTex, TEXTURE_FILTER_POINT);
-	}
-	if (gRunTex.id == 0) {
-		gRunTex = LoadTexture("assets/GlideManRun.png");
-		SetTextureFilter(gRunTex, TEXTURE_FILTER_POINT);
-	}
+    if (gIdleTex.id == 0) {
+        gIdleTex = LoadTexture("assets/GlideManIdle.png");
+        SetTextureFilter(gIdleTex, TEXTURE_FILTER_POINT);
+    }
+    if (gRunTex.id == 0) {
+        gRunTex = LoadTexture("assets/GlideManRun.png");
+        SetTextureFilter(gRunTex, TEXTURE_FILTER_POINT);
+    }
+    // Create left-facing variants by flipping images once at init
+    if (gIdleTexL.id == 0) {
+        Image img = LoadImage("assets/GlideManIdle.png");
+        if (img.data != NULL) {
+            ImageFlipHorizontal(&img);
+            gIdleTexL = LoadTextureFromImage(img);
+            UnloadImage(img);
+            if (gIdleTexL.id != 0) SetTextureFilter(gIdleTexL, TEXTURE_FILTER_POINT);
+        }
+    }
+    if (gRunTexL.id == 0) {
+        Image img = LoadImage("assets/GlideManRun.png");
+        if (img.data != NULL) {
+            ImageFlipHorizontal(&img);
+            gRunTexL = LoadTextureFromImage(img);
+            UnloadImage(img);
+            if (gRunTexL.id != 0) SetTextureFilter(gRunTexL, TEXTURE_FILTER_POINT);
+        }
+    }
 }
 
 void Render_Deinit(void) {
@@ -88,6 +110,14 @@ void Render_Deinit(void) {
     if (gRunTex.id != 0) {
         UnloadTexture(gRunTex);
         gRunTex.id = 0;
+    }
+    if (gIdleTexL.id != 0) {
+        UnloadTexture(gIdleTexL);
+        gIdleTexL.id = 0;
+    }
+    if (gRunTexL.id != 0) {
+        UnloadTexture(gRunTexL);
+        gRunTexL.id = 0;
     }
     // Clear ghost trail
     gGhostCount = 0;
@@ -100,7 +130,10 @@ void RenderPlayer(const GameState *g) {
     const float maxSpeedXNow = g->crouching ? MAX_SPEED_X_CROUCH : MAX_SPEED_X;
     const bool movingFast = speed > (0.5f * maxSpeedXNow);
     const bool running = g->onGround && movingFast;
-    const Texture2D tex = running ? gRunTex : gIdleTex;
+    bool faceRight = g->facingRight;
+    const Texture2D tex = running
+        ? (faceRight ? gRunTex : gRunTexL)
+        : (faceRight ? gIdleTex : gIdleTexL);
 	// Destination rectangle: width = SQUARE_SIZE; height reflects crouch (half height)
 	Rectangle aabb = PlayerAABB(g);
 	float dstW = (float)SQUARE_SIZE;
@@ -125,13 +158,8 @@ void RenderPlayer(const GameState *g) {
 
     // Source rect, handle horizontal flip using negative width
     // For left-facing, offset x slightly from the exact frame boundary to avoid border sampling
-    bool faceRight = g->facingRight;
-    Rectangle src;
-    if (faceRight) {
-        src = (Rectangle){(float)(frame * fw), 0.0f, (float)fw, (float)fh};
-    } else {
-        src = (Rectangle){(float)((frame + 1) * fw - 0.01f), 0.0f, (float)-fw, (float)fh};
-    }
+    // Source rect: always positive width; left/right is baked into chosen texture
+    Rectangle src = (Rectangle){(float)(frame * fw), 0.0f, (float)fw, (float)fh};
 
     // --- Update ghost trail ---
     float dt = GetFrameTime();
@@ -170,13 +198,9 @@ void RenderPlayer(const GameState *g) {
         // Alpha fades out; newer ghosts are brighter
         float alpha = (1.0f - t) * 0.5f; // up to 50% opacity
         unsigned char a = (unsigned char)(alpha * 255.0f);
-        Rectangle gsrc;
-        if (gh->facingRight) {
-            gsrc = (Rectangle){(float)(gh->frame * fw), 0.0f, (float)fw, (float)fh};
-        } else {
-            gsrc = (Rectangle){(float)((gh->frame + 1) * fw - 0.01f), 0.0f, (float)-fw, (float)fh};
-        }
-        DrawTexturePro(gRunTex, gsrc, gh->dst, (Vector2){0, 0}, 0.0f, (Color){255, 255, 255, a});
+        Rectangle gsrc = (Rectangle){(float)(gh->frame * fw), 0.0f, (float)fw, (float)fh};
+        const Texture2D gtex = gh->facingRight ? gRunTex : gRunTexL;
+        DrawTexturePro(gtex, gsrc, gh->dst, (Vector2){0, 0}, 0.0f, (Color){255, 255, 255, a});
     }
 
     // Draw current sprite on top with no rotation, origin at top-left
