@@ -17,6 +17,8 @@ typedef struct GameState {
     float groundStickTimer; // seconds to remain grounded after contact
     bool facingRight; // rendering: last facing direction
     bool jumpPrevDown; // for variable jump: last-frame jump held
+    float wallCoyoteTimer; // seconds to allow wall jump after leaving wall
+    int wallCoyoteDir; // -1 if last touching left wall, +1 if right
 } GameState;
 
 void UpdateGame(GameState *game);

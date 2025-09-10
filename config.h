@@ -46,3 +46,5 @@
 // Wall interaction
 #define WALL_JUMP_PUSH_X 300.0f
 #define WALL_SLIDE_MAX_FALL 260.0f
+// Allow a brief grace period to wall-jump after leaving a wall
+#define WALL_COYOTE_TIME 0.12f

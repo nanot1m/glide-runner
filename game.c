@@ -92,9 +92,10 @@ void UpdateGame(GameState *game) {
 	if (dt > 0.033f) dt = 0.033f;
 	game->runTime += dt;
 	bool didGroundJumpThisFrame = false;
-	if (game->coyoteTimer > 0.0f) game->coyoteTimer -= dt;
-	if (game->jumpBufferTimer > 0.0f) game->jumpBufferTimer -= dt;
-	if (game->groundStickTimer > 0.0f) game->groundStickTimer -= dt;
+    if (game->coyoteTimer > 0.0f) game->coyoteTimer -= dt;
+    if (game->jumpBufferTimer > 0.0f) game->jumpBufferTimer -= dt;
+    if (game->groundStickTimer > 0.0f) game->groundStickTimer -= dt;
+    if (game->wallCoyoteTimer > 0.0f) game->wallCoyoteTimer -= dt;
 
     bool wantJumpPress = InputPressed(ACT_JUMP);
     bool jumpDown = InputDown(ACT_JUMP);
@@ -162,10 +163,16 @@ void UpdateGame(GameState *game) {
 	bool touchingLeft = TouchingWall(game, true, aabbH);
 	bool touchingRight = TouchingWall(game, false, aabbH);
 
-	// Wall slide: clamp fall speed when pressing into a wall while airborne
-	if (!game->onGround && ((touchingLeft && left && !right) || (touchingRight && right && !left))) {
-		if (game->playerVel.y > WALL_SLIDE_MAX_FALL) game->playerVel.y = WALL_SLIDE_MAX_FALL;
-	}
+    // Wall slide: clamp fall speed when pressing into a wall while airborne
+    if (!game->onGround && ((touchingLeft && left && !right) || (touchingRight && right && !left))) {
+        if (game->playerVel.y > WALL_SLIDE_MAX_FALL) game->playerVel.y = WALL_SLIDE_MAX_FALL;
+    }
+
+    // Refresh wall coyote window while airborne and touching a wall
+    if (!game->onGround && (touchingLeft || touchingRight)) {
+        game->wallCoyoteTimer = WALL_COYOTE_TIME;
+        game->wallCoyoteDir = touchingLeft ? -1 : +1;
+    }
 
     bool canJumpNow = game->onGround || game->coyoteTimer > 0.0f;
     if (game->jumpBufferTimer > 0.0f && canJumpNow) {
@@ -176,14 +183,17 @@ void UpdateGame(GameState *game) {
         didGroundJumpThisFrame = true;
     }
 
-	// Wall jump when airborne and touching a wall
-	if (game->jumpBufferTimer > 0.0f && !game->onGround && (touchingLeft || touchingRight)) {
-		game->playerVel.y = JUMP_SPEED;
-		game->playerVel.x = touchingLeft ? WALL_JUMP_PUSH_X : -WALL_JUMP_PUSH_X;
-		game->jumpBufferTimer = 0.0f;
-		game->coyoteTimer = 0.0f;
-		Audio_PlayJump();
-	}
+    // Wall jump when airborne and either touching a wall or within wall coyote window
+    bool canWallJump = !game->onGround && (touchingLeft || touchingRight || game->wallCoyoteTimer > 0.0f);
+    if (game->jumpBufferTimer > 0.0f && canWallJump) {
+        int dir = touchingLeft ? -1 : (touchingRight ? +1 : game->wallCoyoteDir);
+        game->playerVel.y = JUMP_SPEED;
+        game->playerVel.x = (dir == -1) ? WALL_JUMP_PUSH_X : -WALL_JUMP_PUSH_X;
+        game->jumpBufferTimer = 0.0f;
+        game->coyoteTimer = 0.0f;
+        game->wallCoyoteTimer = 0.0f;
+        Audio_PlayJump();
+    }
 
     // Variable jump: if jump released while moving upward, damp upward velocity
     if (game->jumpPrevDown && !jumpDown && game->playerVel.y < 0.0f) {
