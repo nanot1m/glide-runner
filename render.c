@@ -123,14 +123,14 @@ void RenderPlayer(const GameState *g) {
     const float fps = 10.0f; // animation speed
     int frame = (int)(g->runTime * fps) % cols;
 
-    // Source rect: always positive width; flip via destination rect to avoid UV edge issues
+    // Source rect, handle horizontal flip using negative width
+    // For left-facing, offset x slightly from the exact frame boundary to avoid border sampling
     bool faceRight = g->facingRight;
-    Rectangle src = (Rectangle){(float)(frame * fw), 0.0f, (float)fw, (float)fh};
-    Rectangle drawDst = dst;
-    if (!faceRight) {
-        // Flip horizontally by mirroring destination rectangle around its left edge
-        drawDst.x = dst.x + dst.width;
-        drawDst.width = -dst.width;
+    Rectangle src;
+    if (faceRight) {
+        src = (Rectangle){(float)(frame * fw), 0.0f, (float)fw, (float)fh};
+    } else {
+        src = (Rectangle){(float)((frame + 1) * fw - 0.01f), 0.0f, (float)-fw, (float)fh};
     }
 
     // --- Update ghost trail ---
@@ -170,16 +170,15 @@ void RenderPlayer(const GameState *g) {
         // Alpha fades out; newer ghosts are brighter
         float alpha = (1.0f - t) * 0.5f; // up to 50% opacity
         unsigned char a = (unsigned char)(alpha * 255.0f);
-        // Ghost uses same positive-width source; flip via destination when facing left
-        Rectangle gsrc = (Rectangle){(float)(gh->frame * fw), 0.0f, (float)fw, (float)fh};
-        Rectangle gdst = gh->dst;
-        if (!gh->facingRight) {
-            gdst.x = gdst.x + gdst.width;
-            gdst.width = -gdst.width;
+        Rectangle gsrc;
+        if (gh->facingRight) {
+            gsrc = (Rectangle){(float)(gh->frame * fw), 0.0f, (float)fw, (float)fh};
+        } else {
+            gsrc = (Rectangle){(float)((gh->frame + 1) * fw - 0.01f), 0.0f, (float)-fw, (float)fh};
         }
-        DrawTexturePro(gRunTex, gsrc, gdst, (Vector2){0, 0}, 0.0f, (Color){255, 255, 255, a});
+        DrawTexturePro(gRunTex, gsrc, gh->dst, (Vector2){0, 0}, 0.0f, (Color){255, 255, 255, a});
     }
 
     // Draw current sprite on top with no rotation, origin at top-left
-    DrawTexturePro(tex, src, drawDst, (Vector2){0, 0}, 0.0f, WHITE);
+    DrawTexturePro(tex, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
 }
