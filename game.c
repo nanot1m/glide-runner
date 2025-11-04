@@ -156,16 +156,30 @@ void UpdateGame(GameState *game) {
 
 	if (game->playerVel.x > maxSpeedX) game->playerVel.x = maxSpeedX;
 	if (game->playerVel.x < -maxSpeedX) game->playerVel.x = -maxSpeedX;
-	game->playerVel.y += GRAVITY * dt;
+	
+	// Apply gravity with asymmetric multiplier (stronger when falling for better game feel)
+	float gravityMult = (game->playerVel.y > 0.0f) ? GRAVITY_FALL_MULT : 1.0f;
+	game->playerVel.y += GRAVITY * gravityMult * dt;
 	if (game->playerVel.y > MAX_SPEED_Y) game->playerVel.y = MAX_SPEED_Y;
 
 	// Wall interaction checks (use current position before movement)
 	bool touchingLeft = TouchingWall(game, true, aabbH);
 	bool touchingRight = TouchingWall(game, false, aabbH);
 
-    // Wall slide: clamp fall speed when pressing into a wall while airborne
-    if (!game->onGround && ((touchingLeft && left && !right) || (touchingRight && right && !left))) {
-        if (game->playerVel.y > WALL_SLIDE_MAX_FALL) game->playerVel.y = WALL_SLIDE_MAX_FALL;
+    // Wall slide: gradually decelerate to max slide speed when pressing into a wall while airborne
+    bool isWallSliding = !game->onGround && ((touchingLeft && left && !right) || (touchingRight && right && !left));
+    if (isWallSliding) {
+        if (game->playerVel.y > WALL_SLIDE_MAX_FALL) {
+            // Gradually decelerate to wall slide speed
+            float decel = WALL_SLIDE_ACCEL * dt;
+            game->playerVel.y -= decel;
+            if (game->playerVel.y < WALL_SLIDE_MAX_FALL) {
+                game->playerVel.y = WALL_SLIDE_MAX_FALL;
+            }
+        }
+        game->wallSliding = true;
+    } else {
+        game->wallSliding = false;
     }
 
     // Refresh wall coyote window while airborne and touching a wall

@@ -23,8 +23,9 @@
 
 // Physics tuning
 #define GRAVITY 1800.0f
-#define MOVE_ACCEL 1500.0f
-#define AIR_ACCEL 900.0f
+#define GRAVITY_FALL_MULT 1.5f // Higher gravity when falling for snappier feel
+#define MOVE_ACCEL 1800.0f // Increased for more responsive ground movement
+#define AIR_ACCEL 1100.0f // Increased for better air control
 #define GROUND_FRICTION 0.88f
 #define AIR_FRICTION 0.985f
 #define MAX_SPEED_X 640.0f
@@ -44,7 +45,8 @@
 #define CROUCH_FRICTION 0.97f
 
 // Wall interaction
-#define WALL_JUMP_PUSH_X 300.0f
-#define WALL_SLIDE_MAX_FALL 260.0f
+#define WALL_JUMP_PUSH_X 320.0f // Slightly increased for better wall jump distance
+#define WALL_SLIDE_MAX_FALL 220.0f // Reduced for more controlled wall slide
+#define WALL_SLIDE_ACCEL 300.0f // Gradual acceleration when starting wall slide
 // Allow a brief grace period to wall-jump after leaving a wall
 #define WALL_COYOTE_TIME 0.12f
