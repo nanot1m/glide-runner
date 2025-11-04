@@ -47,6 +47,6 @@
 // Wall interaction
 #define WALL_JUMP_PUSH_X 320.0f // Slightly increased for better wall jump distance
 #define WALL_SLIDE_MAX_FALL 220.0f // Reduced for more controlled wall slide
-#define WALL_SLIDE_ACCEL 300.0f // Gradual acceleration when starting wall slide
+#define WALL_SLIDE_ACCEL 300.0f // Gradual deceleration when wall sliding
 // Allow a brief grace period to wall-jump after leaving a wall
 #define WALL_COYOTE_TIME 0.12f
