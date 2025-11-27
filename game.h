@@ -19,6 +19,7 @@ typedef struct GameState {
     bool jumpPrevDown; // for variable jump: last-frame jump held
     float wallCoyoteTimer; // seconds to allow wall jump after leaving wall
     int wallCoyoteDir; // -1 if last touching left wall, +1 if right
+    bool wallSliding; // currently wall sliding
 } GameState;
 
 void UpdateGame(GameState *game);
