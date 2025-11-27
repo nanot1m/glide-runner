@@ -12,6 +12,10 @@ static KeyList gActions[ACT__COUNT];
 static bool gVirtualDown[ACT__COUNT];
 static bool gVirtualPressed[ACT__COUNT];
 
+// Virtual stick state
+static int gStickTouchId = -1; // -1 means no active stick
+static Vector2 gStickOrigin = {0}; // Initial touch position for the stick
+
 typedef struct {
 	const char *name;
 	int key;
@@ -189,26 +193,45 @@ void InputConfig_UpdateTouch(void) {
 	memset(gVirtualDown, 0, sizeof(gVirtualDown));
 	memset(gVirtualPressed, 0, sizeof(gVirtualPressed));
 
-	Rectangle stick = (Rectangle){0.0f, WINDOW_HEIGHT - SQUARE_SIZE * 3.5f, SQUARE_SIZE * 5.0f, SQUARE_SIZE * 3.5f};
-	Rectangle jumpBtn = (Rectangle){WINDOW_WIDTH - SQUARE_SIZE * 3.5f, WINDOW_HEIGHT - SQUARE_SIZE * 3.5f, SQUARE_SIZE * 3.5f, SQUARE_SIZE * 3.5f};
+	float screenMidX = WINDOW_WIDTH * 0.5f;
 	float deadzone = (float)SQUARE_SIZE * 0.35f;
 
 	int touches = GetTouchPointCount();
+	bool stickStillActive = false;
+
 	for (int i = 0; i < touches; ++i) {
 		Vector2 p = GetTouchPosition(i);
-		if (CheckCollisionPointRec(p, stick)) {
-			float cx = stick.x + stick.width * 0.5f;
-			float cy = stick.y + stick.height * 0.5f;
-			float dx = p.x - cx;
-			float dy = p.y - cy;
-			if (dx < -deadzone) gVirtualDown[ACT_LEFT] = true;
-			if (dx > deadzone) gVirtualDown[ACT_RIGHT] = true;
-			if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
+		int touchId = i; // Raylib uses indices as touch IDs in basic mode
+
+		// Left half of screen: virtual stick
+		if (p.x < screenMidX) {
+			// If this is a new touch on the left side, initialize the stick
+			if (gStickTouchId == -1) {
+				gStickTouchId = touchId;
+				gStickOrigin = p;
+			}
+			
+			// If this is the active stick touch
+			if (gStickTouchId == touchId) {
+				stickStillActive = true;
+				float dx = p.x - gStickOrigin.x;
+				float dy = p.y - gStickOrigin.y;
+				
+				if (dx < -deadzone) gVirtualDown[ACT_LEFT] = true;
+				if (dx > deadzone) gVirtualDown[ACT_RIGHT] = true;
+				if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
+			}
 		}
-		if (CheckCollisionPointRec(p, jumpBtn)) {
+		// Right half of screen: jump button
+		else {
 			gVirtualDown[ACT_JUMP] = true;
 			gVirtualDown[ACT_ACTIVATE] = true;
 		}
+	}
+
+	// Reset stick if no longer active
+	if (!stickStillActive) {
+		gStickTouchId = -1;
 	}
 
 	for (int a = 0; a < ACT__COUNT; ++a) {
