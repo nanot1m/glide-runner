@@ -197,41 +197,46 @@ void InputConfig_UpdateTouch(void) {
 	float deadzone = (float)SQUARE_SIZE * 0.35f;
 
 	int touches = GetTouchPointCount();
-	bool stickStillActive = false;
-
+	
+	// Find first left-side touch for stick
+	bool foundLeftTouch = false;
+	Vector2 leftTouchPos = {0};
 	for (int i = 0; i < touches; ++i) {
 		Vector2 p = GetTouchPosition(i);
-		int touchId = i; // Raylib uses indices as touch IDs in basic mode
-
-		// Left half of screen: virtual stick
 		if (p.x < screenMidX) {
-			// If this is a new touch on the left side, initialize the stick
-			if (gStickTouchId == -1) {
-				gStickTouchId = touchId;
-				gStickOrigin = p;
-			}
-			
-			// If this is the active stick touch
-			if (gStickTouchId == touchId) {
-				stickStillActive = true;
-				float dx = p.x - gStickOrigin.x;
-				float dy = p.y - gStickOrigin.y;
-				
-				if (dx < -deadzone) gVirtualDown[ACT_LEFT] = true;
-				if (dx > deadzone) gVirtualDown[ACT_RIGHT] = true;
-				if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
-			}
-		}
-		// Right half of screen: jump button
-		else {
-			gVirtualDown[ACT_JUMP] = true;
-			gVirtualDown[ACT_ACTIVATE] = true;
+			foundLeftTouch = true;
+			leftTouchPos = p;
+			break; // Use first left-side touch only
 		}
 	}
 
-	// Reset stick if no longer active
-	if (!stickStillActive) {
+	// Update stick state
+	if (foundLeftTouch) {
+		// If stick wasn't active, initialize origin at current touch position
+		if (gStickTouchId == -1) {
+			gStickTouchId = 0; // Mark stick as active
+			gStickOrigin = leftTouchPos;
+		}
+		
+		// Calculate stick input from origin
+		float dx = leftTouchPos.x - gStickOrigin.x;
+		float dy = leftTouchPos.y - gStickOrigin.y;
+		
+		if (dx < -deadzone) gVirtualDown[ACT_LEFT] = true;
+		if (dx > deadzone) gVirtualDown[ACT_RIGHT] = true;
+		if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
+	} else {
+		// No left-side touch, reset stick
 		gStickTouchId = -1;
+	}
+
+	// Process right-side touches for jump
+	for (int i = 0; i < touches; ++i) {
+		Vector2 p = GetTouchPosition(i);
+		if (p.x >= screenMidX) {
+			gVirtualDown[ACT_JUMP] = true;
+			gVirtualDown[ACT_ACTIVATE] = true;
+		}
 	}
 
 	for (int a = 0; a < ACT__COUNT; ++a) {
