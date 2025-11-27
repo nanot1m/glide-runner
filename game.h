@@ -20,6 +20,7 @@ typedef struct GameState {
     float wallCoyoteTimer; // seconds to allow wall jump after leaving wall
     int wallCoyoteDir; // -1 if last touching left wall, +1 if right
     bool wallSliding; // currently wall sliding
+    float spriteScaleY; // squash/stretch for jump/landing
 } GameState;
 
 void UpdateGame(GameState *game);

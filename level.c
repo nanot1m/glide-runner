@@ -86,6 +86,7 @@ void CreateDefaultLevel(GameState *game, LevelEditorState *ed) {
 	SetUniqueTile(ed, WorldToCellX(e.x), WorldToCellY(e.y), TILE_EXIT);
 	game->playerPos = p;
 	game->exitPos = e;
+    game->spriteScaleY = 1.0f;
 	game->groundStickTimer = 0.0f;
 }
 
@@ -212,10 +213,11 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 				return false;
 			}
 			ed->tiles[y][x] = (TileType)t;
-		}
+	}
 	fclose(f);
     game->playerPos = (Vector2){(float)px, (float)py};
     game->exitPos = (Vector2){(float)ex, (float)ey};
+    game->spriteScaleY = 1.0f;
     return true;
 }
 

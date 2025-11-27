@@ -139,7 +139,9 @@ void RenderPlayer(const GameState *g) {
 	float dstW = (float)SQUARE_SIZE;
 	// Scale height based on physics AABB vs standing height so crouch is half
 	float heightScale = (float)(aabb.height / (float)PLAYER_H); // 1.0 standing, 0.5 crouched
-	float dstH = (float)SQUARE_SIZE * heightScale;
+    float squashY = g->spriteScaleY;
+    if (squashY < 0.2f) squashY = 0.2f; // avoid collapsing
+	float dstH = (float)SQUARE_SIZE * heightScale * squashY;
 	float dstX = aabb.x + (aabb.width - dstW) * 0.5f; // center horizontally over physics
 	float dstY = (aabb.y + aabb.height) - dstH; // keep feet anchored
     Rectangle dst = (Rectangle){dstX, dstY, dstW, dstH};

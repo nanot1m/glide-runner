@@ -43,6 +43,10 @@
 #define PLAYER_H_CROUCH (PLAYER_H * 0.5f)
 #define MAX_SPEED_X_CROUCH 640.0f
 #define CROUCH_FRICTION 0.97f
+// Squash & stretch tuning
+#define PLAYER_JUMP_STRETCH 1.92f
+#define PLAYER_LAND_SQUASH 0.58f
+#define PLAYER_SQUASH_RECOVER 10.0f
 
 // Wall interaction
 #define WALL_JUMP_PUSH_X 320.0f // Slightly increased for better wall jump distance

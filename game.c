@@ -87,11 +87,13 @@ static bool TouchingWall(const GameState *g, bool leftSide, float aabbH) {
 void UpdateGame(GameState *game) {
 	if (victory || death) return;
 	if (InputGate_BeginFrameBlocked()) return;
+    if (game->spriteScaleY <= 0.0f) game->spriteScaleY = 1.0f;
 
 	float dt = GetFrameTime();
 	if (dt > 0.033f) dt = 0.033f;
 	game->runTime += dt;
 	bool didGroundJumpThisFrame = false;
+    bool didWallJumpThisFrame = false;
     if (game->coyoteTimer > 0.0f) game->coyoteTimer -= dt;
     if (game->jumpBufferTimer > 0.0f) game->jumpBufferTimer -= dt;
     if (game->groundStickTimer > 0.0f) game->groundStickTimer -= dt;
@@ -206,6 +208,7 @@ void UpdateGame(GameState *game) {
         game->jumpBufferTimer = 0.0f;
         game->coyoteTimer = 0.0f;
         game->wallCoyoteTimer = 0.0f;
+        didWallJumpThisFrame = true;
         Audio_PlayJump();
     }
 
@@ -221,6 +224,7 @@ void UpdateGame(GameState *game) {
 	bool wasGround = game->onGround;
 	game->onGround = false;
 
+    bool landedThisFrame = false;
     float belowY = newY + aabbH + 1.0f;
     int leftCell = WorldToCellX(newX + 1.0f);
     int rightCell = WorldToCellX(newX + PLAYER_W - 2.0f);
@@ -230,7 +234,7 @@ void UpdateGame(GameState *game) {
 			game->onGround = true;
 			break;
 		}
-	if (!wasGround && game->onGround) { game->groundStickTimer = GROUND_STICK_TIME; }
+	if (!wasGround && game->onGround) { game->groundStickTimer = GROUND_STICK_TIME; landedThisFrame = true; }
 	if (game->groundStickTimer > 0.0f) game->onGround = true;
 	if (didGroundJumpThisFrame) { Audio_PlayJump(); }
 
@@ -259,6 +263,10 @@ void UpdateGame(GameState *game) {
     if (game->playerVel.x > 1.0f) game->facingRight = true;
     else if (game->playerVel.x < -1.0f) game->facingRight = false;
     if (game->onGround) game->coyoteTimer = COYOTE_TIME;
+    if (didGroundJumpThisFrame || didWallJumpThisFrame) game->spriteScaleY = PLAYER_JUMP_STRETCH;
+    if (landedThisFrame) game->spriteScaleY = PLAYER_LAND_SQUASH;
+    // Recover squash/stretch back toward neutral
+    game->spriteScaleY += (1.0f - game->spriteScaleY) * (PLAYER_SQUASH_RECOVER * dt);
 
     if (CheckCollisionRecs(PlayerAABB(game), ExitAABB(game))) {
         victory = true;

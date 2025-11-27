@@ -51,6 +51,7 @@ int main(void) {
 	game.playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
 	game.playerVel = (Vector2){0, 0};
 	game.exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+    game.spriteScaleY = 1.0f;
 
 	ScreenState screen = SCREEN_MENU;
 	int menuSelected = 0;
