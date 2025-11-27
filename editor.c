@@ -100,10 +100,10 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game) {
 void RenderLevelEditor(const GameState *game) {
 	for (int x = 0; x <= WINDOW_WIDTH; x += SQUARE_SIZE) DrawLine(x, 0, x, WINDOW_HEIGHT, LIGHTGRAY);
 	for (int y = 0; y <= WINDOW_HEIGHT; y += SQUARE_SIZE) DrawLine(0, y, WINDOW_WIDTH, y, LIGHTGRAY);
-    RenderTiles(&editor);
-    // Draw player using actual AABB/sprite so it scales with SQUARE_SIZE changes
-    RenderPlayer(game);
-    DrawRectangleRec((Rectangle){game->exitPos.x, game->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE}, GREEN);
+	RenderTiles(&editor);
+	// Draw player using actual AABB/sprite so it scales with SQUARE_SIZE changes
+	RenderPlayer(game);
+	DrawRectangleRec((Rectangle){game->exitPos.x, game->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE}, GREEN);
 	DrawText("LEVEL EDITOR", 20, 20, 32, DARKGRAY);
 	const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit", "Laser Trap"};
 	DrawText(TextFormat("Tool: %s (Tab to switch)", toolNames[editor.tool]), 20, 60, 18, BLUE);

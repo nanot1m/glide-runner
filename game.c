@@ -10,22 +10,22 @@ static bool victory = false;
 static bool death = false;
 
 static bool AABBOverlapsSolid(float x, float y, float w, float h) {
-    // Check against per-tile solid collision rectangles
-    Rectangle pr = (Rectangle){x, y, w, h};
-    int left = WorldToCellX(x);
-    int right = WorldToCellX(x + w - 0.001f);
-    int top = WorldToCellY(y);
-    int bottom = WorldToCellY(y + h - 0.001f);
-    for (int cy = top; cy <= bottom; ++cy) {
-        for (int cx = left; cx <= right; ++cx) {
-            if (!InBoundsCell(cx, cy)) return true; // out of bounds treated as solid
-            TileType t = editor.tiles[cy][cx];
-            if (!IsSolidTile(t)) continue;
-            Rectangle tr = TileSolidCollisionRect(cx, cy, t);
-            if (tr.width > 0.0f && tr.height > 0.0f && CheckCollisionRecs(pr, tr)) return true;
-        }
-    }
-    return false;
+	// Check against per-tile solid collision rectangles
+	Rectangle pr = (Rectangle){x, y, w, h};
+	int left = WorldToCellX(x);
+	int right = WorldToCellX(x + w - 0.001f);
+	int top = WorldToCellY(y);
+	int bottom = WorldToCellY(y + h - 0.001f);
+	for (int cy = top; cy <= bottom; ++cy) {
+		for (int cx = left; cx <= right; ++cx) {
+			if (!InBoundsCell(cx, cy)) return true; // out of bounds treated as solid
+			TileType t = editor.tiles[cy][cx];
+			if (!IsSolidTile(t)) continue;
+			Rectangle tr = TileSolidCollisionRect(cx, cy, t);
+			if (tr.width > 0.0f && tr.height > 0.0f && CheckCollisionRecs(pr, tr)) return true;
+		}
+	}
+	return false;
 }
 
 static void ResolveAxis(float *pos, float *vel, float other, float w, float h, bool vertical, float dt) {
@@ -38,69 +38,69 @@ static void ResolveAxis(float *pos, float *vel, float other, float w, float h, b
 		if (step > maxStep) step = maxStep;
 		if (step < -maxStep) step = -maxStep;
 		float newPos = *pos + step;
-        float x = vertical ? other : newPos;
-        float y = vertical ? newPos : other;
-        if (AABBOverlapsSolid(x, y, w, h)) {
-            int pixels = (int)fabsf(step);
-            for (int i = 0; i < pixels; ++i) {
-                newPos = *pos + sign;
-                x = vertical ? other : newPos;
-                y = vertical ? newPos : other;
-                if (AABBOverlapsSolid(x, y, w, h)) {
-                    *vel = 0.0f;
-                    return;
-                }
-                *pos = newPos;
-            }
-        } else {
-            *pos = newPos;
-        }
-        remaining -= step;
-    }
+		float x = vertical ? other : newPos;
+		float y = vertical ? newPos : other;
+		if (AABBOverlapsSolid(x, y, w, h)) {
+			int pixels = (int)fabsf(step);
+			for (int i = 0; i < pixels; ++i) {
+				newPos = *pos + sign;
+				x = vertical ? other : newPos;
+				y = vertical ? newPos : other;
+				if (AABBOverlapsSolid(x, y, w, h)) {
+					*vel = 0.0f;
+					return;
+				}
+				*pos = newPos;
+			}
+		} else {
+			*pos = newPos;
+		}
+		remaining -= step;
+	}
 }
 
 static bool PlayerTouchesHazard(const GameState *g) {
-    Rectangle pb = PlayerAABB(g);
-    for (int y = 0; y < GRID_ROWS; ++y)
-        for (int x = 0; x < GRID_COLS; ++x) {
-            TileType t = editor.tiles[y][x];
-            if (!IsHazardTile(t)) continue;
-            Vector2 lp = (Vector2){CellToWorld(x), CellToWorld(y)};
-            Rectangle lr = LaserCollisionRect(lp);
-            if (CheckCollisionRecs(pb, lr)) return true;
-        }
+	Rectangle pb = PlayerAABB(g);
+	for (int y = 0; y < GRID_ROWS; ++y)
+		for (int x = 0; x < GRID_COLS; ++x) {
+			TileType t = editor.tiles[y][x];
+			if (!IsHazardTile(t)) continue;
+			Vector2 lp = (Vector2){CellToWorld(x), CellToWorld(y)};
+			Rectangle lr = LaserCollisionRect(lp);
+			if (CheckCollisionRecs(pb, lr)) return true;
+		}
 	return false;
 }
 
 // Coarse solid check used for ground probing across tiles below the player
 static bool BlockAtCell(int cx, int cy) {
-    if (!InBoundsCell(cx, cy)) return true;
-    return IsSolidTile(editor.tiles[cy][cx]);
+	if (!InBoundsCell(cx, cy)) return true;
+	return IsSolidTile(editor.tiles[cy][cx]);
 }
 
 static bool TouchingWall(const GameState *g, bool leftSide, float aabbH) {
-    float x = leftSide ? (g->playerPos.x - 1.0f) : (g->playerPos.x + PLAYER_W);
-    float y = g->playerPos.y;
-    return AABBOverlapsSolid(x, y, 1.0f, aabbH);
+	float x = leftSide ? (g->playerPos.x - 1.0f) : (g->playerPos.x + PLAYER_W);
+	float y = g->playerPos.y;
+	return AABBOverlapsSolid(x, y, 1.0f, aabbH);
 }
 
 void UpdateGame(GameState *game) {
 	if (victory || death) return;
 	if (InputGate_BeginFrameBlocked()) return;
-    if (game->spriteScaleY <= 0.0f) game->spriteScaleY = 1.0f;
+	if (game->spriteScaleY <= 0.0f) game->spriteScaleY = 1.0f;
 
 	float dt = GetFrameTime();
 	if (dt > 0.033f) dt = 0.033f;
 	game->runTime += dt;
 	bool didGroundJumpThisFrame = false;
-    bool didWallJumpThisFrame = false;
-    if (game->coyoteTimer > 0.0f) game->coyoteTimer -= dt;
-    if (game->jumpBufferTimer > 0.0f) game->jumpBufferTimer -= dt;
-    if (game->groundStickTimer > 0.0f) game->groundStickTimer -= dt;
-    if (game->wallCoyoteTimer > 0.0f) game->wallCoyoteTimer -= dt;
+	bool didWallJumpThisFrame = false;
+	if (game->coyoteTimer > 0.0f) game->coyoteTimer -= dt;
+	if (game->jumpBufferTimer > 0.0f) game->jumpBufferTimer -= dt;
+	if (game->groundStickTimer > 0.0f) game->groundStickTimer -= dt;
+	if (game->wallCoyoteTimer > 0.0f) game->wallCoyoteTimer -= dt;
 
-    bool wantJumpPress = InputPressed(ACT_JUMP);
-    bool jumpDown = InputDown(ACT_JUMP);
+	bool wantJumpPress = InputPressed(ACT_JUMP);
+	bool jumpDown = InputDown(ACT_JUMP);
 	bool left = InputDown(ACT_LEFT);
 	bool right = InputDown(ACT_RIGHT);
 	bool down = InputDown(ACT_DOWN);
@@ -123,15 +123,15 @@ void UpdateGame(GameState *game) {
 			// Crouch -> stand: only if headroom is clear; keep feet anchored
 			float feet = game->playerPos.y + PLAYER_H_CROUCH;
 			float standY = feet - PLAYER_H;
-            if (!AABBOverlapsSolid(game->playerPos.x, standY, PLAYER_W, PLAYER_H)) {
-                game->playerPos.y = standY;
-                game->crouching = false;
-            } else {
-                // Block stand up if obstructed
-                game->crouching = true;
-            }
-        }
-    }
+			if (!AABBOverlapsSolid(game->playerPos.x, standY, PLAYER_W, PLAYER_H)) {
+				game->playerPos.y = standY;
+				game->crouching = false;
+			} else {
+				// Block stand up if obstructed
+				game->crouching = true;
+			}
+		}
+	}
 
 	float maxSpeedX = game->crouching ? MAX_SPEED_X_CROUCH : MAX_SPEED_X;
 	float aabbH = game->crouching ? PLAYER_H_CROUCH : PLAYER_H;
@@ -147,18 +147,18 @@ void UpdateGame(GameState *game) {
 			accelApplied = true;
 		}
 	}
-    if (!accelApplied && game->onGround) {
-        float frames = dt / BASE_DT;
-        float fr = game->crouching ? CROUCH_FRICTION : GROUND_FRICTION;
-        if (frames > 0.0f) game->playerVel.x *= powf(fr, frames);
-    } else if (!accelApplied) {
-        float frames = dt / BASE_DT;
-        if (frames > 0.0f) game->playerVel.x *= powf(AIR_FRICTION, frames);
-    }
+	if (!accelApplied && game->onGround) {
+		float frames = dt / BASE_DT;
+		float fr = game->crouching ? CROUCH_FRICTION : GROUND_FRICTION;
+		if (frames > 0.0f) game->playerVel.x *= powf(fr, frames);
+	} else if (!accelApplied) {
+		float frames = dt / BASE_DT;
+		if (frames > 0.0f) game->playerVel.x *= powf(AIR_FRICTION, frames);
+	}
 
 	if (game->playerVel.x > maxSpeedX) game->playerVel.x = maxSpeedX;
 	if (game->playerVel.x < -maxSpeedX) game->playerVel.x = -maxSpeedX;
-	
+
 	// Apply gravity with asymmetric multiplier (stronger when falling for better game feel)
 	float gravityMult = (game->playerVel.y > 0.0f) ? GRAVITY_FALL_MULT : 1.0f;
 	game->playerVel.y += GRAVITY * gravityMult * dt;
@@ -168,84 +168,87 @@ void UpdateGame(GameState *game) {
 	bool touchingLeft = TouchingWall(game, true, aabbH);
 	bool touchingRight = TouchingWall(game, false, aabbH);
 
-    // Wall slide: gradually decelerate to max slide speed when pressing into a wall while airborne
-    bool isWallSliding = !game->onGround && ((touchingLeft && left && !right) || (touchingRight && right && !left));
-    if (isWallSliding) {
-        if (game->playerVel.y > WALL_SLIDE_MAX_FALL) {
-            // Gradually decelerate to wall slide speed
-            float decel = WALL_SLIDE_ACCEL * dt;
-            game->playerVel.y -= decel;
-            if (game->playerVel.y < WALL_SLIDE_MAX_FALL) {
-                game->playerVel.y = WALL_SLIDE_MAX_FALL;
-            }
-        }
-        game->wallSliding = true;
-    } else {
-        game->wallSliding = false;
-    }
+	// Wall slide: gradually decelerate to max slide speed when pressing into a wall while airborne
+	bool isWallSliding = !game->onGround && ((touchingLeft && left && !right) || (touchingRight && right && !left));
+	if (isWallSliding) {
+		if (game->playerVel.y > WALL_SLIDE_MAX_FALL) {
+			// Gradually decelerate to wall slide speed
+			float decel = WALL_SLIDE_ACCEL * dt;
+			game->playerVel.y -= decel;
+			if (game->playerVel.y < WALL_SLIDE_MAX_FALL) {
+				game->playerVel.y = WALL_SLIDE_MAX_FALL;
+			}
+		}
+		game->wallSliding = true;
+	} else {
+		game->wallSliding = false;
+	}
 
-    // Refresh wall coyote window while airborne and touching a wall
-    if (!game->onGround && (touchingLeft || touchingRight)) {
-        game->wallCoyoteTimer = WALL_COYOTE_TIME;
-        game->wallCoyoteDir = touchingLeft ? -1 : +1;
-    }
+	// Refresh wall coyote window while airborne and touching a wall
+	if (!game->onGround && (touchingLeft || touchingRight)) {
+		game->wallCoyoteTimer = WALL_COYOTE_TIME;
+		game->wallCoyoteDir = touchingLeft ? -1 : +1;
+	}
 
-    bool canJumpNow = game->onGround || game->coyoteTimer > 0.0f;
-    if (game->jumpBufferTimer > 0.0f && canJumpNow) {
-        game->playerVel.y = JUMP_SPEED;
-        game->onGround = false;
-        game->coyoteTimer = 0.0f;
-        game->jumpBufferTimer = 0.0f;
-        didGroundJumpThisFrame = true;
-    }
+	bool canJumpNow = game->onGround || game->coyoteTimer > 0.0f;
+	if (game->jumpBufferTimer > 0.0f && canJumpNow) {
+		game->playerVel.y = JUMP_SPEED;
+		game->onGround = false;
+		game->coyoteTimer = 0.0f;
+		game->jumpBufferTimer = 0.0f;
+		didGroundJumpThisFrame = true;
+	}
 
-    // Wall jump when airborne and either touching a wall or within wall coyote window
-    bool canWallJump = !game->onGround && (touchingLeft || touchingRight || game->wallCoyoteTimer > 0.0f);
-    if (game->jumpBufferTimer > 0.0f && canWallJump) {
-        int dir = touchingLeft ? -1 : (touchingRight ? +1 : game->wallCoyoteDir);
-        game->playerVel.y = JUMP_SPEED;
-        game->playerVel.x = (dir == -1) ? WALL_JUMP_PUSH_X : -WALL_JUMP_PUSH_X;
-        game->jumpBufferTimer = 0.0f;
-        game->coyoteTimer = 0.0f;
-        game->wallCoyoteTimer = 0.0f;
-        didWallJumpThisFrame = true;
-        Audio_PlayJump();
-        Render_SpawnWallJumpDust(game, dir);
-    }
+	// Wall jump when airborne and either touching a wall or within wall coyote window
+	bool canWallJump = !game->onGround && (touchingLeft || touchingRight || game->wallCoyoteTimer > 0.0f);
+	if (game->jumpBufferTimer > 0.0f && canWallJump) {
+		int dir = touchingLeft ? -1 : (touchingRight ? +1 : game->wallCoyoteDir);
+		game->playerVel.y = JUMP_SPEED;
+		game->playerVel.x = (dir == -1) ? WALL_JUMP_PUSH_X : -WALL_JUMP_PUSH_X;
+		game->jumpBufferTimer = 0.0f;
+		game->coyoteTimer = 0.0f;
+		game->wallCoyoteTimer = 0.0f;
+		didWallJumpThisFrame = true;
+		Audio_PlayJump();
+		Render_SpawnWallJumpDust(game, dir);
+	}
 
-    // Variable jump: if jump released while moving upward, damp upward velocity
-    if (game->jumpPrevDown && !jumpDown && game->playerVel.y < 0.0f) {
-        game->playerVel.y *= JUMP_CUT_MULT;
-    }
+	// Variable jump: if jump released while moving upward, damp upward velocity
+	if (game->jumpPrevDown && !jumpDown && game->playerVel.y < 0.0f) {
+		game->playerVel.y *= JUMP_CUT_MULT;
+	}
 
-    float newX = game->playerPos.x;
-    float newY = game->playerPos.y;
+	float newX = game->playerPos.x;
+	float newY = game->playerPos.y;
 	ResolveAxis(&newX, &game->playerVel.x, newY, PLAYER_W, aabbH, false, dt);
 	ResolveAxis(&newY, &game->playerVel.y, newX, PLAYER_W, aabbH, true, dt);
 	bool wasGround = game->onGround;
 	game->onGround = false;
 
-    bool landedThisFrame = false;
-    float belowY = newY + aabbH + 1.0f;
-    int leftCell = WorldToCellX(newX + 1.0f);
-    int rightCell = WorldToCellX(newX + PLAYER_W - 2.0f);
-    int belowCellY = WorldToCellY(belowY);
+	bool landedThisFrame = false;
+	float belowY = newY + aabbH + 1.0f;
+	int leftCell = WorldToCellX(newX + 1.0f);
+	int rightCell = WorldToCellX(newX + PLAYER_W - 2.0f);
+	int belowCellY = WorldToCellY(belowY);
 	for (int cx = leftCell; cx <= rightCell; ++cx)
 		if (BlockAtCell(cx, belowCellY)) {
 			game->onGround = true;
 			break;
 		}
-	if (!wasGround && game->onGround) { game->groundStickTimer = GROUND_STICK_TIME; landedThisFrame = true; }
+	if (!wasGround && game->onGround) {
+		game->groundStickTimer = GROUND_STICK_TIME;
+		landedThisFrame = true;
+	}
 	if (game->groundStickTimer > 0.0f) game->onGround = true;
 
-    if (newX < 0) {
-        newX = 0;
-        game->playerVel.x = 0;
-    }
-    if (newX > WINDOW_WIDTH - PLAYER_W) {
-        newX = WINDOW_WIDTH - PLAYER_W;
-        game->playerVel.x = 0;
-    }
+	if (newX < 0) {
+		newX = 0;
+		game->playerVel.x = 0;
+	}
+	if (newX > WINDOW_WIDTH - PLAYER_W) {
+		newX = WINDOW_WIDTH - PLAYER_W;
+		game->playerVel.x = 0;
+	}
 	if (newY < 0) {
 		newY = 0;
 		game->playerVel.y = 0;
@@ -256,24 +259,32 @@ void UpdateGame(GameState *game) {
 		game->onGround = true;
 	}
 
-    game->playerPos.x = newX;
-    game->playerPos.y = newY;
-    game->jumpPrevDown = jumpDown;
-    if (didGroundJumpThisFrame) { Audio_PlayJump(); Render_SpawnJumpDust(game); }
-    // Update facing based on horizontal velocity, keep last when near zero
-    if (game->playerVel.x > 1.0f) game->facingRight = true;
-    else if (game->playerVel.x < -1.0f) game->facingRight = false;
-    if (game->onGround) game->coyoteTimer = COYOTE_TIME;
-    if (didGroundJumpThisFrame || didWallJumpThisFrame) game->spriteScaleY = PLAYER_JUMP_STRETCH;
-    if (landedThisFrame) { game->spriteScaleY = PLAYER_LAND_SQUASH; Render_SpawnLandDust(game); }
-    // Recover squash/stretch back toward neutral
-    game->spriteScaleY += (1.0f - game->spriteScaleY) * (PLAYER_SQUASH_RECOVER * dt);
+	game->playerPos.x = newX;
+	game->playerPos.y = newY;
+	game->jumpPrevDown = jumpDown;
+	if (didGroundJumpThisFrame) {
+		Audio_PlayJump();
+		Render_SpawnJumpDust(game);
+	}
+	// Update facing based on horizontal velocity, keep last when near zero
+	if (game->playerVel.x > 1.0f)
+		game->facingRight = true;
+	else if (game->playerVel.x < -1.0f)
+		game->facingRight = false;
+	if (game->onGround) game->coyoteTimer = COYOTE_TIME;
+	if (didGroundJumpThisFrame || didWallJumpThisFrame) game->spriteScaleY = PLAYER_JUMP_STRETCH;
+	if (landedThisFrame) {
+		game->spriteScaleY = PLAYER_LAND_SQUASH;
+		Render_SpawnLandDust(game);
+	}
+	// Recover squash/stretch back toward neutral
+	game->spriteScaleY += (1.0f - game->spriteScaleY) * (PLAYER_SQUASH_RECOVER * dt);
 
-    if (CheckCollisionRecs(PlayerAABB(game), ExitAABB(game))) {
-        victory = true;
-        game->score = (int)(game->runTime * 1000.0f);
-        Audio_PlayVictory();
-    }
+	if (CheckCollisionRecs(PlayerAABB(game), ExitAABB(game))) {
+		victory = true;
+		game->score = (int)(game->runTime * 1000.0f);
+		Audio_PlayVictory();
+	}
 	if (PlayerTouchesHazard(game)) {
 		death = true;
 		Audio_PlayDeath();
@@ -281,12 +292,12 @@ void UpdateGame(GameState *game) {
 }
 
 void RenderGame(const GameState *game) {
-    float dt = GetFrameTime();
-    if (dt > 0.033f) dt = 0.033f;
-    RenderTiles(&editor);
-    Render_DrawDust(dt);
-    RenderPlayer(game);
-    DrawRectangleRec(ExitAABB(game), GREEN);
+	float dt = GetFrameTime();
+	if (dt > 0.033f) dt = 0.033f;
+	RenderTiles(&editor);
+	Render_DrawDust(dt);
+	RenderPlayer(game);
+	DrawRectangleRec(ExitAABB(game), GREEN);
 	// TODO: show stats in debug builds
 	// DrawStats(game);
 }

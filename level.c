@@ -90,7 +90,7 @@ void CreateDefaultLevel(GameState *game, LevelEditorState *ed) {
 	SetUniqueTile(ed, WorldToCellX(e.x), WorldToCellY(e.y), TILE_EXIT);
 	game->playerPos = p;
 	game->exitPos = e;
-    game->spriteScaleY = 1.0f;
+	game->spriteScaleY = 1.0f;
 	game->groundStickTimer = 0.0f;
 }
 
@@ -99,7 +99,7 @@ bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed) {
 	FILE *f = fopen(gLevelBinPath, "wb");
 	if (!f) return false;
 	const char magic[4] = {'L', 'V', 'L', '1'};
-    uint8_t version = kLevelFormatVersion; // store player/exit as tile coordinates
+	uint8_t version = kLevelFormatVersion; // store player/exit as tile coordinates
 	uint16_t cols = (uint16_t)GRID_COLS, rows = (uint16_t)GRID_ROWS;
 	if (fwrite(magic, 1, 4, f) != 4) {
 		fclose(f);
@@ -117,29 +117,29 @@ bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed) {
 		fclose(f);
 		return false;
 	}
-    Vector2 p = game->playerPos, e = game->exitPos;
-    FindTileWorldPos(ed, TILE_PLAYER, &p);
-    FindTileWorldPos(ed, TILE_EXIT, &e);
-    uint16_t pcx = (uint16_t)WorldToCellX(p.x);
-    uint16_t pcy = (uint16_t)WorldToCellY(p.y);
-    uint16_t ecx = (uint16_t)WorldToCellX(e.x);
-    uint16_t ecy = (uint16_t)WorldToCellY(e.y);
-    if (fwrite(&pcx, sizeof(pcx), 1, f) != 1) {
-        fclose(f);
-        return false;
-    }
-    if (fwrite(&pcy, sizeof(pcy), 1, f) != 1) {
-        fclose(f);
-        return false;
-    }
-    if (fwrite(&ecx, sizeof(ecx), 1, f) != 1) {
-        fclose(f);
-        return false;
-    }
-    if (fwrite(&ecy, sizeof(ecy), 1, f) != 1) {
-        fclose(f);
-        return false;
-    }
+	Vector2 p = game->playerPos, e = game->exitPos;
+	FindTileWorldPos(ed, TILE_PLAYER, &p);
+	FindTileWorldPos(ed, TILE_EXIT, &e);
+	uint16_t pcx = (uint16_t)WorldToCellX(p.x);
+	uint16_t pcy = (uint16_t)WorldToCellY(p.y);
+	uint16_t ecx = (uint16_t)WorldToCellX(e.x);
+	uint16_t ecy = (uint16_t)WorldToCellY(e.y);
+	if (fwrite(&pcx, sizeof(pcx), 1, f) != 1) {
+		fclose(f);
+		return false;
+	}
+	if (fwrite(&pcy, sizeof(pcy), 1, f) != 1) {
+		fclose(f);
+		return false;
+	}
+	if (fwrite(&ecx, sizeof(ecx), 1, f) != 1) {
+		fclose(f);
+		return false;
+	}
+	if (fwrite(&ecy, sizeof(ecy), 1, f) != 1) {
+		fclose(f);
+		return false;
+	}
 	for (int y = 0; y < GRID_ROWS; ++y)
 		for (int x = 0; x < GRID_COLS; ++x) {
 			uint8_t t = (uint8_t)ed->tiles[y][x];
@@ -163,7 +163,7 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 	FILE *f = fopen(gLevelBinPath, "rb");
 	if (!f) return false;
 	char magic[4];
-    uint8_t version = 0;
+	uint8_t version = 0;
 	uint16_t cols = 0, rows = 0;
 	if (fread(magic, 1, 4, f) != 4) {
 		fclose(f);
@@ -177,7 +177,10 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 		fclose(f);
 		return false;
 	}
-    if (version != 1 && version != 2) { fclose(f); return false; }
+	if (version != 1 && version != 2) {
+		fclose(f);
+		return false;
+	}
 	if (fread(&cols, sizeof(cols), 1, f) != 1) {
 		fclose(f);
 		return false;
@@ -190,35 +193,66 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 		fclose(f);
 		return false;
 	}
-    int32_t px = 0, py = 0, ex = 0, ey = 0;
-    int pcx = 0, pcy = 0, ecx = 0, ecy = 0;
-    if (version == 1) {
-        if (fread(&px, sizeof(px), 1, f) != 1) { fclose(f); return false; }
-        if (fread(&py, sizeof(py), 1, f) != 1) { fclose(f); return false; }
-        if (fread(&ex, sizeof(ex), 1, f) != 1) { fclose(f); return false; }
-        if (fread(&ey, sizeof(ey), 1, f) != 1) { fclose(f); return false; }
-        // Convert legacy world-pixel positions (baked with kLegacyV1SquareSize) to tile coords
-        pcx = (int)(px / kLegacyV1SquareSize);
-        pcy = (int)(py / kLegacyV1SquareSize);
-        ecx = (int)(ex / kLegacyV1SquareSize);
-        ecy = (int)(ey / kLegacyV1SquareSize);
-    } else {
-        uint16_t pcx16 = 0, pcy16 = 0, ecx16 = 0, ecy16 = 0;
-        if (fread(&pcx16, sizeof(pcx16), 1, f) != 1) { fclose(f); return false; }
-        if (fread(&pcy16, sizeof(pcy16), 1, f) != 1) { fclose(f); return false; }
-        if (fread(&ecx16, sizeof(ecx16), 1, f) != 1) { fclose(f); return false; }
-        if (fread(&ecy16, sizeof(ecy16), 1, f) != 1) { fclose(f); return false; }
-        pcx = (int)pcx16; pcy = (int)pcy16; ecx = (int)ecx16; ecy = (int)ecy16;
-    }
-    // Clamp to grid and convert to world using current SQUARE_SIZE so placement scales with tile size
-    if (pcx < 0) pcx = 0; if (pcx >= GRID_COLS) pcx = GRID_COLS - 1;
-    if (pcy < 0) pcy = 0; if (pcy >= GRID_ROWS) pcy = GRID_ROWS - 1;
-    if (ecx < 0) ecx = 0; if (ecx >= GRID_COLS) ecx = GRID_COLS - 1;
-    if (ecy < 0) ecy = 0; if (ecy >= GRID_ROWS) ecy = GRID_ROWS - 1;
-    px = (int32_t)CellToWorld(pcx);
-    py = (int32_t)CellToWorld(pcy);
-    ex = (int32_t)CellToWorld(ecx);
-    ey = (int32_t)CellToWorld(ecy);
+	int32_t px = 0, py = 0, ex = 0, ey = 0;
+	int pcx = 0, pcy = 0, ecx = 0, ecy = 0;
+	if (version == 1) {
+		if (fread(&px, sizeof(px), 1, f) != 1) {
+			fclose(f);
+			return false;
+		}
+		if (fread(&py, sizeof(py), 1, f) != 1) {
+			fclose(f);
+			return false;
+		}
+		if (fread(&ex, sizeof(ex), 1, f) != 1) {
+			fclose(f);
+			return false;
+		}
+		if (fread(&ey, sizeof(ey), 1, f) != 1) {
+			fclose(f);
+			return false;
+		}
+		// Convert legacy world-pixel positions (baked with kLegacyV1SquareSize) to tile coords
+		pcx = (int)(px / kLegacyV1SquareSize);
+		pcy = (int)(py / kLegacyV1SquareSize);
+		ecx = (int)(ex / kLegacyV1SquareSize);
+		ecy = (int)(ey / kLegacyV1SquareSize);
+	} else {
+		uint16_t pcx16 = 0, pcy16 = 0, ecx16 = 0, ecy16 = 0;
+		if (fread(&pcx16, sizeof(pcx16), 1, f) != 1) {
+			fclose(f);
+			return false;
+		}
+		if (fread(&pcy16, sizeof(pcy16), 1, f) != 1) {
+			fclose(f);
+			return false;
+		}
+		if (fread(&ecx16, sizeof(ecx16), 1, f) != 1) {
+			fclose(f);
+			return false;
+		}
+		if (fread(&ecy16, sizeof(ecy16), 1, f) != 1) {
+			fclose(f);
+			return false;
+		}
+		pcx = (int)pcx16;
+		pcy = (int)pcy16;
+		ecx = (int)ecx16;
+		ecy = (int)ecy16;
+	}
+	// Clamp to grid and convert to world using current SQUARE_SIZE so placement scales with tile size
+	if (pcx < 0) pcx = 0;
+	if (pcx >= GRID_COLS) pcx = GRID_COLS - 1;
+	if (pcy < 0) pcy = 0;
+	if (pcy >= GRID_ROWS) pcy = GRID_ROWS - 1;
+	if (ecx < 0) ecx = 0;
+	if (ecx >= GRID_COLS) ecx = GRID_COLS - 1;
+	if (ecy < 0) ecy = 0;
+	if (ecy >= GRID_ROWS) ecy = GRID_ROWS - 1;
+	px = (int32_t)CellToWorld(pcx);
+	py = (int32_t)CellToWorld(pcy);
+	ex = (int32_t)CellToWorld(ecx);
+	ey = (int32_t)CellToWorld(ecy);
 	for (int y = 0; y < GRID_ROWS; ++y)
 		for (int x = 0; x < GRID_COLS; ++x) ed->tiles[y][x] = TILE_EMPTY;
 	for (int y = 0; y < GRID_ROWS; ++y)
@@ -229,12 +263,12 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 				return false;
 			}
 			ed->tiles[y][x] = (TileType)t;
-	}
+		}
 	fclose(f);
-    game->playerPos = (Vector2){(float)px, (float)py};
-    game->exitPos = (Vector2){(float)ex, (float)ey};
-    game->spriteScaleY = 1.0f;
-    return true;
+	game->playerPos = (Vector2){(float)px, (float)py};
+	game->exitPos = (Vector2){(float)ex, (float)ey};
+	game->spriteScaleY = 1.0f;
+	return true;
 }
 
 // ---- Level catalog ----

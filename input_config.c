@@ -197,7 +197,7 @@ void InputConfig_UpdateTouch(void) {
 	float deadzone = (float)SQUARE_SIZE * 0.35f;
 
 	int touches = GetTouchPointCount();
-	
+
 	// Find first left-side touch for stick
 	bool foundLeftTouch = false;
 	Vector2 leftTouchPos = {0};
@@ -217,11 +217,11 @@ void InputConfig_UpdateTouch(void) {
 			gStickActive = true;
 			gStickOrigin = leftTouchPos;
 		}
-		
+
 		// Calculate stick input from origin
 		float dx = leftTouchPos.x - gStickOrigin.x;
 		float dy = leftTouchPos.y - gStickOrigin.y;
-		
+
 		if (dx < -deadzone) gVirtualDown[ACT_LEFT] = true;
 		if (dx > deadzone) gVirtualDown[ACT_RIGHT] = true;
 		if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
