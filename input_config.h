@@ -18,5 +18,6 @@ typedef enum {
 } InputAction;
 
 void InputConfig_Init(void); // loads config/input.cfg if present, else defaults
+void InputConfig_UpdateTouch(void); // called each frame to feed virtual stick/touch buttons
 bool InputDown(InputAction a); // any bound key is currently down
 bool InputPressed(InputAction a); // any bound key was pressed this frame

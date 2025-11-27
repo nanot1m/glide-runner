@@ -2,12 +2,15 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include "config.h"
 
 typedef struct {
 	int count;
 	int keys[8];
 } KeyList;
 static KeyList gActions[ACT__COUNT];
+static bool gVirtualDown[ACT__COUNT];
+static bool gVirtualPressed[ACT__COUNT];
 
 typedef struct {
 	const char *name;
@@ -180,12 +183,45 @@ void InputConfig_Init(void) {
 	TryLoadFile("config/input.cfg");
 }
 
+void InputConfig_UpdateTouch(void) {
+	bool prevDown[ACT__COUNT];
+	memcpy(prevDown, gVirtualDown, sizeof(prevDown));
+	memset(gVirtualDown, 0, sizeof(gVirtualDown));
+	memset(gVirtualPressed, 0, sizeof(gVirtualPressed));
+
+	Rectangle stick = (Rectangle){0.0f, WINDOW_HEIGHT - SQUARE_SIZE * 3.5f, SQUARE_SIZE * 5.0f, SQUARE_SIZE * 3.5f};
+	Rectangle jumpBtn = (Rectangle){WINDOW_WIDTH - SQUARE_SIZE * 3.5f, WINDOW_HEIGHT - SQUARE_SIZE * 3.5f, SQUARE_SIZE * 3.5f, SQUARE_SIZE * 3.5f};
+	float deadzone = (float)SQUARE_SIZE * 0.35f;
+
+	int touches = GetTouchPointCount();
+	for (int i = 0; i < touches; ++i) {
+		Vector2 p = GetTouchPosition(i);
+		if (CheckCollisionPointRec(p, stick)) {
+			float cx = stick.x + stick.width * 0.5f;
+			float cy = stick.y + stick.height * 0.5f;
+			float dx = p.x - cx;
+			float dy = p.y - cy;
+			if (dx < -deadzone) gVirtualDown[ACT_LEFT] = true;
+			if (dx > deadzone) gVirtualDown[ACT_RIGHT] = true;
+			if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
+		}
+		if (CheckCollisionPointRec(p, jumpBtn)) {
+			gVirtualDown[ACT_JUMP] = true;
+			gVirtualDown[ACT_ACTIVATE] = true;
+		}
+	}
+
+	for (int a = 0; a < ACT__COUNT; ++a) {
+		if (gVirtualDown[a] && !prevDown[a]) gVirtualPressed[a] = true;
+	}
+}
+
 bool InputDown(InputAction a) {
 	if (a < 0 || a >= ACT__COUNT) return false;
 	KeyList *kl = &gActions[a];
 	for (int i = 0; i < kl->count; i++)
 		if (IsKeyDown(kl->keys[i])) return true;
-	return false;
+	return gVirtualDown[a];
 }
 
 bool InputPressed(InputAction a) {
@@ -193,5 +229,5 @@ bool InputPressed(InputAction a) {
 	KeyList *kl = &gActions[a];
 	for (int i = 0; i < kl->count; i++)
 		if (IsKeyPressed(kl->keys[i])) return true;
-	return false;
+	return gVirtualPressed[a];
 }

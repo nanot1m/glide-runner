@@ -61,6 +61,7 @@ int main(void) {
 	bool gameLevelLoaded = false;
 
 	while (!WindowShouldClose()) {
+		InputConfig_UpdateTouch();
 		switch (screen) {
 		case SCREEN_MENU:
 			UpdateMenu(&screen, &menuSelected);
