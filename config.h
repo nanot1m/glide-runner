@@ -7,7 +7,7 @@
 // so behavior remains unchanged unless you tweak cols/rows.
 // Grid / tiles
 // Size of one square in pixels
-#define SQUARE_SIZE 32
+#define SQUARE_SIZE 28
 // Number of columns and rows in the grid
 #define GRID_COLS 40
 #define GRID_ROWS 30
@@ -47,6 +47,11 @@
 #define PLAYER_JUMP_STRETCH 1.92f
 #define PLAYER_LAND_SQUASH 0.58f
 #define PLAYER_SQUASH_RECOVER 10.0f
+
+// Dust particle tuning
+#define DUST_MAX 96
+#define DUST_GRAVITY 240.0f
+#define DUST_DRAG 0.97f
 
 // Wall interaction
 #define WALL_JUMP_PUSH_X 320.0f // Slightly increased for better wall jump distance

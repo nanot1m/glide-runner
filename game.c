@@ -210,6 +210,7 @@ void UpdateGame(GameState *game) {
         game->wallCoyoteTimer = 0.0f;
         didWallJumpThisFrame = true;
         Audio_PlayJump();
+        Render_SpawnWallJumpDust(game, dir);
     }
 
     // Variable jump: if jump released while moving upward, damp upward velocity
@@ -236,7 +237,6 @@ void UpdateGame(GameState *game) {
 		}
 	if (!wasGround && game->onGround) { game->groundStickTimer = GROUND_STICK_TIME; landedThisFrame = true; }
 	if (game->groundStickTimer > 0.0f) game->onGround = true;
-	if (didGroundJumpThisFrame) { Audio_PlayJump(); }
 
     if (newX < 0) {
         newX = 0;
@@ -259,12 +259,13 @@ void UpdateGame(GameState *game) {
     game->playerPos.x = newX;
     game->playerPos.y = newY;
     game->jumpPrevDown = jumpDown;
+    if (didGroundJumpThisFrame) { Audio_PlayJump(); Render_SpawnJumpDust(game); }
     // Update facing based on horizontal velocity, keep last when near zero
     if (game->playerVel.x > 1.0f) game->facingRight = true;
     else if (game->playerVel.x < -1.0f) game->facingRight = false;
     if (game->onGround) game->coyoteTimer = COYOTE_TIME;
     if (didGroundJumpThisFrame || didWallJumpThisFrame) game->spriteScaleY = PLAYER_JUMP_STRETCH;
-    if (landedThisFrame) game->spriteScaleY = PLAYER_LAND_SQUASH;
+    if (landedThisFrame) { game->spriteScaleY = PLAYER_LAND_SQUASH; Render_SpawnLandDust(game); }
     // Recover squash/stretch back toward neutral
     game->spriteScaleY += (1.0f - game->spriteScaleY) * (PLAYER_SQUASH_RECOVER * dt);
 
@@ -280,7 +281,10 @@ void UpdateGame(GameState *game) {
 }
 
 void RenderGame(const GameState *game) {
+    float dt = GetFrameTime();
+    if (dt > 0.033f) dt = 0.033f;
     RenderTiles(&editor);
+    Render_DrawDust(dt);
     RenderPlayer(game);
     DrawRectangleRec(ExitAABB(game), GREEN);
 	// TODO: show stats in debug builds

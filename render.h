@@ -21,3 +21,7 @@ void DrawStats(const GameState *g);
 void Render_Init(void);
 void Render_Deinit(void);
 void RenderPlayer(const GameState *g);
+void Render_DrawDust(float dt);
+void Render_SpawnJumpDust(const GameState *g);
+void Render_SpawnLandDust(const GameState *g);
+void Render_SpawnWallJumpDust(const GameState *g, int wallDir);
