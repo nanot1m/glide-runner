@@ -194,11 +194,12 @@ void InputConfig_UpdateTouch(void) {
 	memset(gVirtualPressed, 0, sizeof(gVirtualPressed));
 
 	float screenMidX = WINDOW_WIDTH * 0.5f;
+	float screenMidY = WINDOW_HEIGHT * 0.5f;
 	float deadzone = (float)SQUARE_SIZE * 0.35f;
 
 	int touches = GetTouchPointCount();
 
-	// Find first left-side touch for stick
+	// Find first left-side touch for stick (left/right only)
 	bool foundLeftTouch = false;
 	Vector2 leftTouchPos = {0};
 	for (int i = 0; i < touches; ++i) {
@@ -210,7 +211,7 @@ void InputConfig_UpdateTouch(void) {
 		}
 	}
 
-	// Update stick state
+	// Update stick state (horizontal movement only)
 	if (foundLeftTouch) {
 		// If stick wasn't active, initialize origin at current touch position
 		if (!gStickActive) {
@@ -218,24 +219,28 @@ void InputConfig_UpdateTouch(void) {
 			gStickOrigin = leftTouchPos;
 		}
 
-		// Calculate stick input from origin
+		// Calculate stick input from origin (horizontal only)
 		float dx = leftTouchPos.x - gStickOrigin.x;
-		float dy = leftTouchPos.y - gStickOrigin.y;
 
 		if (dx < -deadzone) gVirtualDown[ACT_LEFT] = true;
 		if (dx > deadzone) gVirtualDown[ACT_RIGHT] = true;
-		if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
 	} else {
 		// No left-side touch, reset stick
 		gStickActive = false;
 	}
 
-	// Process right-side touches for jump
+	// Process right-side touches: upper half for jump, lower half for crouch
 	for (int i = 0; i < touches; ++i) {
 		Vector2 p = GetTouchPosition(i);
 		if (p.x >= screenMidX) {
-			gVirtualDown[ACT_JUMP] = true;
-			gVirtualDown[ACT_ACTIVATE] = true;
+			if (p.y < screenMidY) {
+				// Upper half: jump
+				gVirtualDown[ACT_JUMP] = true;
+				gVirtualDown[ACT_ACTIVATE] = true; // Keep activate for menu compatibility
+			} else {
+				// Lower half: crouch
+				gVirtualDown[ACT_DOWN] = true;
+			}
 		}
 	}
 
