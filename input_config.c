@@ -12,6 +12,10 @@ static KeyList gActions[ACT__COUNT];
 static bool gVirtualDown[ACT__COUNT];
 static bool gVirtualPressed[ACT__COUNT];
 
+// Virtual stick state
+static bool gStickActive = false; // true when stick is active
+static Vector2 gStickOrigin = {0}; // Initial touch position for the stick
+
 typedef struct {
 	const char *name;
 	int key;
@@ -189,23 +193,47 @@ void InputConfig_UpdateTouch(void) {
 	memset(gVirtualDown, 0, sizeof(gVirtualDown));
 	memset(gVirtualPressed, 0, sizeof(gVirtualPressed));
 
-	Rectangle stick = (Rectangle){0.0f, WINDOW_HEIGHT - SQUARE_SIZE * 3.5f, SQUARE_SIZE * 5.0f, SQUARE_SIZE * 3.5f};
-	Rectangle jumpBtn = (Rectangle){WINDOW_WIDTH - SQUARE_SIZE * 3.5f, WINDOW_HEIGHT - SQUARE_SIZE * 3.5f, SQUARE_SIZE * 3.5f, SQUARE_SIZE * 3.5f};
+	float screenMidX = WINDOW_WIDTH * 0.5f;
 	float deadzone = (float)SQUARE_SIZE * 0.35f;
 
 	int touches = GetTouchPointCount();
+
+	// Find first left-side touch for stick
+	bool foundLeftTouch = false;
+	Vector2 leftTouchPos = {0};
 	for (int i = 0; i < touches; ++i) {
 		Vector2 p = GetTouchPosition(i);
-		if (CheckCollisionPointRec(p, stick)) {
-			float cx = stick.x + stick.width * 0.5f;
-			float cy = stick.y + stick.height * 0.5f;
-			float dx = p.x - cx;
-			float dy = p.y - cy;
-			if (dx < -deadzone) gVirtualDown[ACT_LEFT] = true;
-			if (dx > deadzone) gVirtualDown[ACT_RIGHT] = true;
-			if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
+		if (p.x < screenMidX) {
+			foundLeftTouch = true;
+			leftTouchPos = p;
+			break; // Use first left-side touch only
 		}
-		if (CheckCollisionPointRec(p, jumpBtn)) {
+	}
+
+	// Update stick state
+	if (foundLeftTouch) {
+		// If stick wasn't active, initialize origin at current touch position
+		if (!gStickActive) {
+			gStickActive = true;
+			gStickOrigin = leftTouchPos;
+		}
+
+		// Calculate stick input from origin
+		float dx = leftTouchPos.x - gStickOrigin.x;
+		float dy = leftTouchPos.y - gStickOrigin.y;
+
+		if (dx < -deadzone) gVirtualDown[ACT_LEFT] = true;
+		if (dx > deadzone) gVirtualDown[ACT_RIGHT] = true;
+		if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
+	} else {
+		// No left-side touch, reset stick
+		gStickActive = false;
+	}
+
+	// Process right-side touches for jump
+	for (int i = 0; i < touches; ++i) {
+		Vector2 p = GetTouchPosition(i);
+		if (p.x >= screenMidX) {
 			gVirtualDown[ACT_JUMP] = true;
 			gVirtualDown[ACT_ACTIVATE] = true;
 		}

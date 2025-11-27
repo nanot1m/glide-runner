@@ -58,14 +58,14 @@ static inline bool IsHazardTile(TileType t) { return t == TILE_LASER; }
 // Solid collision box for a tile at cell coordinates, in world space.
 // Visuals remain SQUARE_SIZE; this function defines physics bounds per tile type.
 static inline Rectangle TileSolidCollisionRect(int cx, int cy, TileType t) {
-    float x = CellToWorld(cx);
-    float y = CellToWorld(cy);
-    switch (t) {
-    case TILE_BLOCK:
-        return (Rectangle){x, y, (float)SQUARE_SIZE, (float)SQUARE_SIZE};
-    default:
-        return (Rectangle){0, 0, 0, 0}; // non-solid
-    }
+	float x = CellToWorld(cx);
+	float y = CellToWorld(cy);
+	switch (t) {
+	case TILE_BLOCK:
+		return (Rectangle){x, y, (float)SQUARE_SIZE, (float)SQUARE_SIZE};
+	default:
+		return (Rectangle){0, 0, 0, 0}; // non-solid
+	}
 }
 
 void SetTile(LevelEditorState *ed, int cx, int cy, TileType v);
