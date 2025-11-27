@@ -13,7 +13,7 @@ static bool gVirtualDown[ACT__COUNT];
 static bool gVirtualPressed[ACT__COUNT];
 
 // Virtual stick state
-static int gStickTouchId = -1; // -1 means no active stick
+static bool gStickActive = false; // true when stick is active
 static Vector2 gStickOrigin = {0}; // Initial touch position for the stick
 
 typedef struct {
@@ -213,8 +213,8 @@ void InputConfig_UpdateTouch(void) {
 	// Update stick state
 	if (foundLeftTouch) {
 		// If stick wasn't active, initialize origin at current touch position
-		if (gStickTouchId == -1) {
-			gStickTouchId = 0; // Mark stick as active
+		if (!gStickActive) {
+			gStickActive = true;
 			gStickOrigin = leftTouchPos;
 		}
 		
@@ -227,7 +227,7 @@ void InputConfig_UpdateTouch(void) {
 		if (dy > deadzone) gVirtualDown[ACT_DOWN] = true;
 	} else {
 		// No left-side touch, reset stick
-		gStickTouchId = -1;
+		gStickActive = false;
 	}
 
 	// Process right-side touches for jump
