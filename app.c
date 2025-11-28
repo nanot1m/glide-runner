@@ -41,6 +41,9 @@ static void ResetPlayerDefaults(GameState *game) {
 	game->playerVel = (Vector2){0, 0};
 	game->exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
 	game->spriteScaleY = 1.0f;
+	game->spriteScaleX = 1.0f;
+	game->spriteRotation = 0.0f;
+	game->hidden = false;
 }
 
 static bool EnsureEditorLevel(GameState *game, bool *editorLoaded) {
@@ -72,6 +75,7 @@ static bool EnsureGameLevel(GameState *game, bool *gameLevelLoaded) {
 	*gameLevelLoaded = true;
 	game->runTime = 0.0f;
 	game->score = 0;
+	Game_ResetVisuals(game);
 	Game_ClearOutcome();
 	return true;
 }
@@ -185,6 +189,7 @@ static void UpdateScreen(ScreenState *screen, GameState *game, float dt, bool *e
 		if (!blockInput) {
 			if (InputPressed(ACT_ACTIVATE)) {
 				InputGate_RequestBlockOnce();
+				Game_ResetVisuals(game);
 				Game_ClearOutcome();
 				*gameLevelLoaded = false;
 				*screen = SCREEN_GAME_LEVEL;
@@ -239,6 +244,7 @@ static void RenderScreen(ScreenState screen, GameState *game, float frameDt, int
 		RenderGame(game, &editor, frameDt);
 		break;
 	case SCREEN_DEATH:
+		Render_DrawDust(frameDt);
 		RenderDeath();
 		break;
 	case SCREEN_VICTORY:
@@ -304,6 +310,8 @@ int main(void) {
 			gameLevelLoaded = false;
 			Game_ClearOutcome();
 			menuSelected = 0;
+			Game_ResetVisuals(&game);
+			ResetPlayerDefaults(&game);
 		}
 
 		bool inMenuScreens = (screen == SCREEN_MENU || screen == SCREEN_SELECT_EDIT || screen == SCREEN_SELECT_PLAY || screen == SCREEN_LEVEL_EDITOR || screen == SCREEN_SETTINGS);

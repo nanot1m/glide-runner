@@ -25,3 +25,4 @@ void Render_DrawDust(float dt);
 void Render_SpawnJumpDust(const GameState *g);
 void Render_SpawnLandDust(const GameState *g);
 void Render_SpawnWallJumpDust(const GameState *g, int wallDir);
+void Render_SpawnDeathExplosion(const GameState *g);

@@ -8,8 +8,10 @@
 
 static bool victory = false;
 static bool death = false;
+static float deathAnimTimer = 0.0f;
 
 static const struct LevelEditorState *gLevel = NULL;
+static const float kDeathAnimDuration = 0.7f;
 
 static bool AABBOverlapsSolid(float x, float y, float w, float h) {
 	// Check against per-tile solid collision rectangles
@@ -88,7 +90,26 @@ static bool TouchingWall(const GameState *g, bool leftSide, float aabbH) {
 
 void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt) {
 	gLevel = level;
-	if (victory || death) return;
+	if (death) {
+		if (deathAnimTimer > 0.0f) {
+			deathAnimTimer -= dt;
+			float t = 1.0f - (deathAnimTimer / kDeathAnimDuration);
+			if (t < 0.0f) t = 0.0f;
+			if (t > 1.0f) t = 1.0f;
+			float scale = 1.0f + t; // grows to 2x
+			game->spriteScaleX = scale;
+			game->spriteScaleY = scale;
+			game->spriteRotation = 90.0f * t;
+			// Drift with momentum and gravity, without collision
+			game->playerVel.y += GRAVITY * GRAVITY_FALL_MULT * dt;
+			game->playerPos.x += game->playerVel.x * dt;
+			game->playerPos.y += game->playerVel.y * dt;
+			if (deathAnimTimer < 0.2f) game->hidden = true;
+			if (deathAnimTimer < 0.0f) deathAnimTimer = 0.0f;
+		}
+		return;
+	}
+	if (victory) return;
 	if (InputGate_BeginFrameBlocked()) return;
 	if (game->spriteScaleY <= 0.0f) game->spriteScaleY = 1.0f;
 
@@ -294,7 +315,13 @@ void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt)
 	}
 	if (PlayerTouchesHazard(game)) {
 		death = true;
+		deathAnimTimer = kDeathAnimDuration;
+		game->spriteScaleX = 1.0f;
+		game->spriteScaleY = 1.0f;
+		game->spriteRotation = 0.0f;
+		game->hidden = false;
 		Audio_PlayDeath();
+		Render_SpawnDeathExplosion(game);
 	}
 }
 
@@ -309,8 +336,18 @@ void RenderGame(const GameState *game, const struct LevelEditorState *level, flo
 }
 
 bool Game_Victory(void) { return victory; }
-bool Game_Death(void) { return death; }
+bool Game_Death(void) { return death && deathAnimTimer <= 0.0f; }
 void Game_ClearOutcome(void) {
 	victory = false;
 	death = false;
+	deathAnimTimer = 0.0f;
+}
+
+// Reset transient render flags on respawn
+void Game_ResetVisuals(GameState *game) {
+	if (!game) return;
+	game->spriteScaleX = 1.0f;
+	game->spriteScaleY = 1.0f;
+	game->spriteRotation = 0.0f;
+	game->hidden = false;
 }

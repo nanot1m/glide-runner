@@ -64,6 +64,7 @@ typedef struct DustParticle {
 	float radius;
 	float lifetime;
 	float age;
+	Color color;
 	bool active;
 } DustParticle;
 
@@ -88,6 +89,7 @@ static void Dust_SpawnOne(Vector2 pos, Vector2 vel, float radius, float life) {
 	gDust[idx].radius = radius;
 	gDust[idx].lifetime = life;
 	gDust[idx].age = 0.0f;
+	gDust[idx].color = (Color){200, 200, 200, 255};
 	gDust[idx].active = true;
 }
 
@@ -131,6 +133,20 @@ void Render_SpawnWallJumpDust(const GameState *g, int wallDir) {
 	Dust_Burst(origin, dir, 10, 240.0f);
 }
 
+void Render_SpawnDeathExplosion(const GameState *g) {
+	Rectangle aabb = PlayerAABB(g);
+	Vector2 center = (Vector2){aabb.x + aabb.width * 0.5f, aabb.y + aabb.height * 0.5f};
+	for (int i = 0; i < 64; ++i) {
+		float angle = RandRange(0.0f, 6.28318f);
+		float speed = RandRange(180.0f, 360.0f);
+		Vector2 vel = (Vector2){cosf(angle) * speed, sinf(angle) * speed};
+		float r = RandRange(3.5f, 6.5f);
+		float life = RandRange(0.35f, 0.6f);
+		Dust_SpawnOne(center, vel, r, life);
+		gDust[(gDustCursor + DUST_MAX - 1) % DUST_MAX].color = (Color){220, 40, 40, 255};
+	}
+}
+
 static void Dust_Update(float dt) {
 	for (int i = 0; i < DUST_MAX; ++i) {
 		DustParticle *p = &gDust[i];
@@ -156,7 +172,8 @@ static void Dust_Draw(void) {
 		if (t > 1.0f) t = 1.0f;
 		float radius = p->radius * (1.0f - 0.35f * t);
 		unsigned char a = (unsigned char)(255.0f * (1.0f - t));
-		Color c = (Color){200, 200, 200, a};
+		Color c = p->color;
+		c.a = a;
 		DrawCircleV(p->pos, radius, c);
 	}
 }
@@ -223,6 +240,8 @@ void Render_Deinit(void) {
 
 void RenderPlayer(const GameState *g) {
 	// Choose animation based on simple state: running vs idle
+	if (g->hidden) return;
+
 	const float speed = (float)fabsf(g->playerVel.x);
 	const float maxSpeedXNow = g->crouching ? MAX_SPEED_X_CROUCH : MAX_SPEED_X;
 	const bool movingFast = speed > (0.5f * maxSpeedXNow);
@@ -233,7 +252,7 @@ void RenderPlayer(const GameState *g) {
 	                          : (faceRight ? gIdleTex : gIdleTexL);
 	// Destination rectangle: width = SQUARE_SIZE; height reflects crouch (half height)
 	Rectangle aabb = PlayerAABB(g);
-	float dstW = (float)SQUARE_SIZE;
+	float dstW = (float)SQUARE_SIZE * (g->spriteScaleX <= 0.0f ? 1.0f : g->spriteScaleX);
 	// Scale height based on physics AABB vs standing height so crouch is half
 	float heightScale = (float)(aabb.height / (float)PLAYER_H); // 1.0 standing, 0.5 crouched
 	float squashY = g->spriteScaleY;
@@ -284,5 +303,5 @@ void RenderPlayer(const GameState *g) {
 		gRunDustTimer = 0.0f;
 	}
 
-	DrawTexturePro(tex, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
+	DrawTexturePro(tex, src, dst, (Vector2){0, 0}, g->spriteRotation, WHITE);
 }

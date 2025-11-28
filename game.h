@@ -21,6 +21,9 @@ typedef struct GameState {
 	int wallCoyoteDir; // -1 if last touching left wall, +1 if right
 	bool wallSliding; // currently wall sliding
 	float spriteScaleY; // squash/stretch for jump/landing
+	float spriteScaleX; // horizontal scale (death puff)
+	float spriteRotation; // degrees
+	bool hidden; // skip rendering when true
 } GameState;
 
 struct LevelEditorState;
@@ -32,3 +35,4 @@ void RenderGame(const GameState *game, const struct LevelEditorState *level, flo
 bool Game_Victory(void);
 bool Game_Death(void);
 void Game_ClearOutcome(void);
+void Game_ResetVisuals(GameState *game);
