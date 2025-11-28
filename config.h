@@ -7,7 +7,7 @@
 // so behavior remains unchanged unless you tweak cols/rows.
 // Grid / tiles
 // Size of one square in pixels
-#define SQUARE_SIZE 28
+#define SQUARE_SIZE 32
 // Number of columns and rows in the grid
 #define GRID_COLS 40
 #define GRID_ROWS 30

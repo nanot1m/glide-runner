@@ -24,6 +24,7 @@ typedef struct GameState {
 	float spriteScaleX; // horizontal scale (death puff)
 	float spriteRotation; // degrees
 	bool hidden; // skip rendering when true
+	float groundSink; // small render offset for grounded weight
 } GameState;
 
 struct LevelEditorState;

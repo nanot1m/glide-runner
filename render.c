@@ -3,6 +3,10 @@
 #include <string.h>
 #include "raylib.h"
 
+static Texture2D gBlockTileset = {0};
+static const int BLOCK_TILE_SIZE = 32;
+static int gBlockTileCols = 0;
+
 Rectangle PlayerAABB(const GameState *g) {
 	float h = g->crouching ? PLAYER_H_CROUCH : PLAYER_H;
 	return (Rectangle){g->playerPos.x, g->playerPos.y, PLAYER_W, h};
@@ -25,13 +29,135 @@ Rectangle LaserCollisionRect(Vector2 laserPos) {
 	return (Rectangle){laserPos.x, laserPos.y + LASER_STRIPE_OFFSET, (float)SQUARE_SIZE - 1.0f, LASER_STRIPE_THICKNESS};
 }
 
+static inline bool IsBlockAt(const LevelEditorState *ed, int cx, int cy) {
+	if (!InBoundsCell(cx, cy)) return false;
+	return IsSolidTile(ed->tiles[cy][cx]);
+}
+
+static Rectangle BlockTileSrc(int tx, int ty) {
+	return (Rectangle){(float)(tx * BLOCK_TILE_SIZE), (float)(ty * BLOCK_TILE_SIZE), (float)BLOCK_TILE_SIZE, (float)BLOCK_TILE_SIZE};
+}
+
+static Rectangle ChooseBlockSrc(const LevelEditorState *ed, int cx, int cy) {
+	bool up = IsBlockAt(ed, cx, cy - 1);
+	// bool isUpEdge = up && !IsBlockAt(ed, cx, cy - 2);
+	bool down = IsBlockAt(ed, cx, cy + 1);
+	// bool isDownEdge = down && !IsBlockAt(ed, cx, cy + 2);
+	bool left = IsBlockAt(ed, cx - 1, cy);
+	// bool isLeftEdge = left && !IsBlockAt(ed, cx - 2, cy);
+	bool right = IsBlockAt(ed, cx + 1, cy);
+	// bool isRightEdge = right && !IsBlockAt(ed, cx + 2, cy);
+	bool upLeft = IsBlockAt(ed, cx - 1, cy - 1);
+	bool upRight = IsBlockAt(ed, cx + 1, cy - 1);
+	bool downLeft = IsBlockAt(ed, cx - 1, cy + 1);
+	bool downRight = IsBlockAt(ed, cx + 1, cy + 1);
+
+	if (!up && !down) {
+		if (!left && !right) return BlockTileSrc(3, 3); // isolated middle
+		if (!left && right) return BlockTileSrc(0, 3); // left edge
+		if (!right && left) return BlockTileSrc(2, 3); // right edge
+		return BlockTileSrc(1, 3); // middle row
+	}
+
+	// Use simple 3x3 framing tiles: row 0 top with grass, row1 middle, row2 bottom
+	if (!up) {
+		if (left && right && !downLeft && !downRight) return BlockTileSrc(9, 3); // inner bottom
+		if (left && right && !downLeft) return BlockTileSrc(7, 0); // inner bottom-left
+		if (left && right && !downRight) return BlockTileSrc(6, 0); // inner bottom-right
+		if (!left && !right) return BlockTileSrc(3, 0); // isolated top
+		if (!left && !downRight) return BlockTileSrc(4, 0); // inner bottom-right
+		if (!left) return BlockTileSrc(0, 0); // top-left corner
+		if (!right && !downLeft) return BlockTileSrc(5, 0); // inner bottom-right
+		if (!right) return BlockTileSrc(2, 0); // top-right corner
+		return BlockTileSrc(1, 0); // top edge
+	}
+
+	if (!down) {
+		if (left && right && !upLeft && !upRight) return BlockTileSrc(8, 3); // inner top
+		if (left && right && !upLeft) return BlockTileSrc(7, 1); // inner top-left
+		if (left && right && !upRight) return BlockTileSrc(6, 1); // inner top-right
+		if (!left && !right) return BlockTileSrc(3, 2); // isolated bottom
+		if (!left && !upRight) return BlockTileSrc(4, 1); // inner top-right
+		if (!left) return BlockTileSrc(0, 2); // bottom-left
+		if (!right && !upLeft) return BlockTileSrc(5, 1); // inner top-left
+		if (!right) return BlockTileSrc(2, 2); // bottom-right
+		return BlockTileSrc(1, 2); // bottom edge
+	}
+
+	if (left && right) {
+		if (!downLeft && !downRight && !upLeft && !upRight) return BlockTileSrc(8, 1);
+		if (upLeft && upRight && !downLeft && !downRight) return BlockTileSrc(9, 2);
+		if (!upLeft && !downLeft && upRight && downRight) return BlockTileSrc(9, 0);
+		if (upLeft && downLeft && !upRight && !downRight) return BlockTileSrc(8, 0);
+		if (!upLeft && !upRight && !downRight && downLeft) return BlockTileSrc(9, 1); // inner bottom-left
+		if (!upLeft && !upRight && downRight && !downLeft) return BlockTileSrc(10, 1); // inner bottom-left
+		if (upLeft && downRight && !upRight && !downLeft) return BlockTileSrc(10, 2); // inner top-right
+		if (!upLeft && !downRight && upRight && downLeft) return BlockTileSrc(10, 3); // inner top-left
+		if (!downRight && !downLeft && !upRight && upLeft) return BlockTileSrc(11, 2); 
+		if (!downRight && !downLeft && upRight && !upLeft) return BlockTileSrc(11, 3); 
+		if (!upLeft && !upRight) return BlockTileSrc(8, 2); // inner top
+		if (!upLeft) return BlockTileSrc(5, 3); // inner top-left
+		if (!upRight) return BlockTileSrc(4, 3); // inner top-right
+		if (!downRight) return BlockTileSrc(4, 2); // inner bottom
+	}
+
+	// middle row
+	if (!left && right) {
+		if (!upRight && !downRight) return BlockTileSrc(4, 0);
+		if (!downRight) return BlockTileSrc(6, 2);
+		if (!upRight) return BlockTileSrc(6, 3);
+		return BlockTileSrc(0, 1);
+	}
+	if (!right && left) {
+		if (!upLeft && !downLeft) return BlockTileSrc(5, 0);
+		if (!downLeft) return BlockTileSrc(7, 2);
+		if (!upLeft) return BlockTileSrc(7, 3);
+		return BlockTileSrc(2, 1);
+	}
+	if (!right && !left) return BlockTileSrc(3, 1);
+
+	return BlockTileSrc(1, 1); // fully surrounded
+}
+
+static void DrawBlock(Rectangle dest, Rectangle srcOverride) {
+	if (gBlockTileset.id == 0) {
+		DrawRectangleRec(dest, GRAY);
+		return;
+	}
+	Rectangle src = srcOverride;
+	DrawTexturePro(gBlockTileset, src, dest, (Vector2){0, 0}, 0.0f, WHITE);
+}
+
 void RenderTiles(const LevelEditorState *ed) {
 	for (int y = 0; y < GRID_ROWS; ++y) {
 		for (int x = 0; x < GRID_COLS; ++x) {
 			TileType t = ed->tiles[y][x];
 			if (IsSolidTile(t)) {
 				Rectangle r = TileRect(x, y);
-				DrawRectangleRec(r, GRAY);
+				Rectangle src = ChooseBlockSrc(ed, x, y);
+				DrawBlock(r, src);
+			} else if (IsHazardTile(t)) {
+				Rectangle lr = LaserStripeRect((Vector2){CellToWorld(x), CellToWorld(y)});
+				DrawRectangleRec(lr, RED);
+			}
+		}
+	}
+}
+
+void RenderTilesGameplay(const LevelEditorState *ed, const GameState *g) {
+	int leftCell = WorldToCellX(g->playerPos.x + 1.0f);
+	int rightCell = WorldToCellX(g->playerPos.x + PLAYER_W - 2.0f);
+	int footCellY = WorldToCellY(g->playerPos.y + (g->crouching ? PLAYER_H_CROUCH : PLAYER_H) + 0.5f);
+	for (int y = 0; y < GRID_ROWS; ++y) {
+		for (int x = 0; x < GRID_COLS; ++x) {
+			TileType t = ed->tiles[y][x];
+			if (IsSolidTile(t)) {
+				Rectangle r = TileRect(x, y);
+				if (g->onGround && y == footCellY && x >= leftCell && x <= rightCell) {
+					r.y += 1.0f;
+				}
+				Rectangle src = ChooseBlockSrc(ed, x, y);
+				DrawBlock(r, src);
 			} else if (IsHazardTile(t)) {
 				Rectangle lr = LaserStripeRect((Vector2){CellToWorld(x), CellToWorld(y)});
 				DrawRectangleRec(lr, RED);
@@ -211,6 +337,13 @@ bool Render_Init(void) {
 			if (gRunTexL.id != 0) SetTextureFilter(gRunTexL, TEXTURE_FILTER_POINT);
 		}
 	}
+	if (gBlockTileset.id == 0) {
+		gBlockTileset = LoadTexture("assets/tilesetgrass.png");
+		if (gBlockTileset.id != 0) {
+			SetTextureFilter(gBlockTileset, TEXTURE_FILTER_POINT);
+			gBlockTileCols = gBlockTileset.width / BLOCK_TILE_SIZE;
+		}
+	}
 	Dust_Reset();
 	// Return success if at least one of the core sprites loaded; fallback drawing still works
 	bool spritesReady = (gIdleTex.id != 0) && (gRunTex.id != 0) && (gIdleTexL.id != 0) && (gRunTexL.id != 0);
@@ -233,6 +366,11 @@ void Render_Deinit(void) {
 	if (gRunTexL.id != 0) {
 		UnloadTexture(gRunTexL);
 		gRunTexL.id = 0;
+	}
+	if (gBlockTileset.id != 0) {
+		UnloadTexture(gBlockTileset);
+		gBlockTileset.id = 0;
+		gBlockTileCols = 0;
 	}
 	gRunDustTimer = 0.0f;
 	Dust_Reset();
@@ -260,6 +398,7 @@ void RenderPlayer(const GameState *g) {
 	float dstH = (float)SQUARE_SIZE * heightScale * squashY;
 	float dstX = aabb.x + (aabb.width - dstW) * 0.5f; // center horizontally over physics
 	float dstY = (aabb.y + aabb.height) - dstH; // keep feet anchored
+	dstY += g->groundSink;
 	Rectangle dst = (Rectangle){dstX, dstY, dstW, dstH};
 
 	if (tex.id == 0) {

@@ -307,6 +307,8 @@ void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt)
 	}
 	// Recover squash/stretch back toward neutral
 	game->spriteScaleY += (1.0f - game->spriteScaleY) * (PLAYER_SQUASH_RECOVER * dt);
+	float targetSink = game->onGround ? 1.0f : 0.0f;
+	game->groundSink += (targetSink - game->groundSink) * (12.0f * dt);
 
 	if (CheckCollisionRecs(PlayerAABB(game), ExitAABB(game))) {
 		victory = true;
@@ -327,7 +329,7 @@ void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt)
 
 void RenderGame(const GameState *game, const struct LevelEditorState *level, float dt) {
 	gLevel = level;
-	RenderTiles(level);
+	RenderTilesGameplay(level, game);
 	Render_DrawDust(dt);
 	RenderPlayer(game);
 	DrawRectangleRec(ExitAABB(game), GREEN);
@@ -350,4 +352,5 @@ void Game_ResetVisuals(GameState *game) {
 	game->spriteScaleY = 1.0f;
 	game->spriteRotation = 0.0f;
 	game->hidden = false;
+	game->groundSink = 0.0f;
 }

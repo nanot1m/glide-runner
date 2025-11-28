@@ -15,6 +15,7 @@ Rectangle LaserStripeRect(Vector2 laserPos);
 Rectangle LaserCollisionRect(Vector2 laserPos);
 
 void RenderTiles(const LevelEditorState *ed);
+void RenderTilesGameplay(const LevelEditorState *ed, const GameState *g);
 void DrawStats(const GameState *g);
 
 // Sprites and animated rendering

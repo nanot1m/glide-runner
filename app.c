@@ -44,6 +44,7 @@ static void ResetPlayerDefaults(GameState *game) {
 	game->spriteScaleX = 1.0f;
 	game->spriteRotation = 0.0f;
 	game->hidden = false;
+	game->groundSink = 0.0f;
 }
 
 static bool EnsureEditorLevel(GameState *game, bool *editorLoaded) {
