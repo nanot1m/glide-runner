@@ -1,6 +1,14 @@
 #include "fps_meter.h"
 #include <stdbool.h>
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <sys/types.h>
+#else
+#include <direct.h>
+#endif
 #include "config.h"
 #include "raylib.h"
 
@@ -33,6 +41,35 @@ static float gLabelFps = 0.0f;
 static float gLastLabelTime = 0.0f;
 static bool gEnabled = true;
 
+static void EnsureConfigDir(void) {
+#ifndef _WIN32
+	mkdir("config", 0755);
+#else
+	_mkdir("config");
+#endif
+}
+
+static void SaveSettings(void) {
+	EnsureConfigDir();
+	FILE *f = fopen("config/settings.cfg", "w");
+	if (!f) return;
+	fprintf(f, "fps_meter=%d\n", gEnabled ? 1 : 0);
+	fclose(f);
+}
+
+static void LoadSettings(void) {
+	FILE *f = fopen("config/settings.cfg", "r");
+	if (!f) return;
+	char key[64] = {0};
+	int val = 1;
+	while (fscanf(f, "%63[^=]=%d\n", key, &val) == 2) {
+		if (strcmp(key, "fps_meter") == 0) {
+			gEnabled = (val != 0);
+		}
+	}
+	fclose(f);
+}
+
 static int IndexAt(int offset) { return (gHead + offset) % FPS_MAX_SAMPLES; }
 
 static void PruneOld(float now) {
@@ -49,6 +86,7 @@ void FpsMeter_Init(void) {
 	gLabelFps = 0.0f;
 	gLastLabelTime = 0.0f;
 	gEnabled = true;
+	LoadSettings();
 }
 
 void FpsMeter_BeginFrame(void) {
@@ -137,7 +175,10 @@ void FpsMeter_Draw(void) {
 	}
 }
 
-void FpsMeter_SetEnabled(bool enabled) { gEnabled = enabled; }
+void FpsMeter_SetEnabled(bool enabled) {
+	gEnabled = enabled;
+	SaveSettings();
+}
 bool FpsMeter_IsEnabled(void) { return gEnabled; }
 
 #endif // ENABLE_FPS_METER

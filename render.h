@@ -18,7 +18,7 @@ void RenderTiles(const LevelEditorState *ed);
 void DrawStats(const GameState *g);
 
 // Sprites and animated rendering
-void Render_Init(void);
+bool Render_Init(void);
 void Render_Deinit(void);
 void RenderPlayer(const GameState *g);
 void Render_DrawDust(float dt);

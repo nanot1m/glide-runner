@@ -23,8 +23,10 @@ typedef struct GameState {
 	float spriteScaleY; // squash/stretch for jump/landing
 } GameState;
 
-void UpdateGame(GameState *game);
-void RenderGame(const GameState *game);
+struct LevelEditorState;
+
+void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt);
+void RenderGame(const GameState *game, const struct LevelEditorState *level, float dt);
 
 // Outcome flags
 bool Game_Victory(void);

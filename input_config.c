@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 #include "config.h"
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <sys/types.h>
+#else
+#include <direct.h>
+#endif
 
 typedef struct {
 	int count;
@@ -28,19 +34,31 @@ static const KeyName KEY_NAMES[] = {
     {"RETURN", KEY_ENTER},
     {"ESCAPE", KEY_ESCAPE},
     {"TAB", KEY_TAB},
+    {"SHIFT", KEY_LEFT_SHIFT},
+    {"CTRL", KEY_LEFT_CONTROL},
+    {"ALT", KEY_LEFT_ALT},
     {"UP", KEY_UP},
     {"DOWN", KEY_DOWN},
     {"LEFT", KEY_LEFT},
     {"RIGHT", KEY_RIGHT},
+    {"Q", KEY_Q},
+    {"E", KEY_E},
+    {"R", KEY_R},
+    {"F", KEY_F},
     {"W", KEY_W},
     {"A", KEY_A},
     {"S", KEY_S},
     {"D", KEY_D},
+    {"ZERO", KEY_ZERO},
     {"ONE", KEY_ONE},
     {"TWO", KEY_TWO},
     {"THREE", KEY_THREE},
     {"FOUR", KEY_FOUR},
     {"FIVE", KEY_FIVE},
+    {"SIX", KEY_SIX},
+    {"SEVEN", KEY_SEVEN},
+    {"EIGHT", KEY_EIGHT},
+    {"NINE", KEY_NINE},
 };
 
 static int FindKeyByName(const char *s) {
@@ -151,6 +169,29 @@ static const char *KeyNameFromKey(int key) {
 	return NULL;
 }
 
+static void EnsureConfigDir(void) {
+#ifndef _WIN32
+	mkdir("config", 0755);
+#else
+	_mkdir("config");
+#endif
+}
+
+static void RemoveKeyFromAll(InputAction target, int key) {
+	if (key == 0) return;
+	for (int a = 0; a < (int)ACT__COUNT; ++a) {
+		if (a == (int)target) continue;
+		KeyList *kl = &gActions[a];
+		for (int i = 0; i < kl->count; ++i) {
+			if (kl->keys[i] == key) {
+				for (int j = i; j < kl->count - 1; ++j) kl->keys[j] = kl->keys[j + 1];
+				kl->count--;
+				break;
+			}
+		}
+	}
+}
+
 static void TryLoadFile(const char *path) {
 	FILE *f = fopen(path, "r");
 	if (!f) return;
@@ -190,6 +231,7 @@ static void TryLoadFile(const char *path) {
 
 void InputConfig_Init(void) {
 	LoadDefaults();
+	EnsureConfigDir();
 	// Try load from repo config
 	TryLoadFile("config/input.cfg");
 }
@@ -300,11 +342,13 @@ const char *InputConfig_KeyName(int key) { return KeyNameFromKey(key); }
 void InputConfig_SetSingleKey(InputAction a, int key) {
 	if (a < 0 || a >= ACT__COUNT) return;
 	if (KeyNameFromKey(key) == NULL) return;
+	RemoveKeyFromAll(a, key);
 	gActions[a].count = 0;
 	AddKey(a, key);
 }
 
 void InputConfig_Save(void) {
+	EnsureConfigDir();
 	FILE *f = fopen("config/input.cfg", "w");
 	if (!f) return;
 	for (int a = 0; a < ACT__COUNT; ++a) {

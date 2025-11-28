@@ -35,7 +35,7 @@ typedef enum {
 	TOOL_COUNT
 } EditorTool;
 
-typedef struct {
+typedef struct LevelEditorState {
 	Vector2 cursor;
 	TileType tiles[GRID_ROWS][GRID_COLS];
 	EditorTool tool;

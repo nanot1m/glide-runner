@@ -9,6 +9,8 @@
 static bool victory = false;
 static bool death = false;
 
+static const struct LevelEditorState *gLevel = NULL;
+
 static bool AABBOverlapsSolid(float x, float y, float w, float h) {
 	// Check against per-tile solid collision rectangles
 	Rectangle pr = (Rectangle){x, y, w, h};
@@ -19,7 +21,7 @@ static bool AABBOverlapsSolid(float x, float y, float w, float h) {
 	for (int cy = top; cy <= bottom; ++cy) {
 		for (int cx = left; cx <= right; ++cx) {
 			if (!InBoundsCell(cx, cy)) return true; // out of bounds treated as solid
-			TileType t = editor.tiles[cy][cx];
+			TileType t = gLevel->tiles[cy][cx];
 			if (!IsSolidTile(t)) continue;
 			Rectangle tr = TileSolidCollisionRect(cx, cy, t);
 			if (tr.width > 0.0f && tr.height > 0.0f && CheckCollisionRecs(pr, tr)) return true;
@@ -63,7 +65,7 @@ static bool PlayerTouchesHazard(const GameState *g) {
 	Rectangle pb = PlayerAABB(g);
 	for (int y = 0; y < GRID_ROWS; ++y)
 		for (int x = 0; x < GRID_COLS; ++x) {
-			TileType t = editor.tiles[y][x];
+			TileType t = gLevel->tiles[y][x];
 			if (!IsHazardTile(t)) continue;
 			Vector2 lp = (Vector2){CellToWorld(x), CellToWorld(y)};
 			Rectangle lr = LaserCollisionRect(lp);
@@ -75,7 +77,7 @@ static bool PlayerTouchesHazard(const GameState *g) {
 // Coarse solid check used for ground probing across tiles below the player
 static bool BlockAtCell(int cx, int cy) {
 	if (!InBoundsCell(cx, cy)) return true;
-	return IsSolidTile(editor.tiles[cy][cx]);
+	return IsSolidTile(gLevel->tiles[cy][cx]);
 }
 
 static bool TouchingWall(const GameState *g, bool leftSide, float aabbH) {
@@ -84,13 +86,12 @@ static bool TouchingWall(const GameState *g, bool leftSide, float aabbH) {
 	return AABBOverlapsSolid(x, y, 1.0f, aabbH);
 }
 
-void UpdateGame(GameState *game) {
+void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt) {
+	gLevel = level;
 	if (victory || death) return;
 	if (InputGate_BeginFrameBlocked()) return;
 	if (game->spriteScaleY <= 0.0f) game->spriteScaleY = 1.0f;
 
-	float dt = GetFrameTime();
-	if (dt > 0.033f) dt = 0.033f;
 	game->runTime += dt;
 	bool didGroundJumpThisFrame = false;
 	bool didWallJumpThisFrame = false;
@@ -291,10 +292,9 @@ void UpdateGame(GameState *game) {
 	}
 }
 
-void RenderGame(const GameState *game) {
-	float dt = GetFrameTime();
-	if (dt > 0.033f) dt = 0.033f;
-	RenderTiles(&editor);
+void RenderGame(const GameState *game, const struct LevelEditorState *level, float dt) {
+	gLevel = level;
+	RenderTiles(level);
 	Render_DrawDust(dt);
 	RenderPlayer(game);
 	DrawRectangleRec(ExitAABB(game), GREEN);

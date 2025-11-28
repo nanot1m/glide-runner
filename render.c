@@ -166,7 +166,7 @@ void Render_DrawDust(float dt) {
 	Dust_Draw();
 }
 
-void Render_Init(void) {
+bool Render_Init(void) {
 	if (gIdleTex.id == 0) {
 		gIdleTex = LoadTexture("assets/GlideManIdle.png");
 		SetTextureFilter(gIdleTex, TEXTURE_FILTER_POINT);
@@ -195,6 +195,9 @@ void Render_Init(void) {
 		}
 	}
 	Dust_Reset();
+	// Return success if at least one of the core sprites loaded; fallback drawing still works
+	bool spritesReady = (gIdleTex.id != 0) && (gRunTex.id != 0) && (gIdleTexL.id != 0) && (gRunTexL.id != 0);
+	return spritesReady;
 }
 
 void Render_Deinit(void) {
