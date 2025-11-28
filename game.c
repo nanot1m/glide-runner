@@ -168,6 +168,12 @@ void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt)
 	// Wall interaction checks (use current position before movement)
 	bool touchingLeft = TouchingWall(game, true, aabbH);
 	bool touchingRight = TouchingWall(game, false, aabbH);
+	// Do not allow wall interactions while grounded
+	if (game->onGround) {
+		touchingLeft = false;
+		touchingRight = false;
+		game->wallCoyoteTimer = 0.0f;
+	}
 
 	// Wall slide: gradually decelerate to max slide speed when pressing into a wall while airborne
 	bool isWallSliding = !game->onGround && ((touchingLeft && left && !right) || (touchingRight && right && !left));
