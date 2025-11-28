@@ -18,81 +18,81 @@ static inline bool IsBlockAt(const void *context, int cx, int cy) {
 	return gConfig.checkBlock(context, cx, cy);
 }
 
-static Rectangle BlockTileSrc(int tx, int ty) {
-	return (Rectangle){(float)(tx * gConfig.tileSize), (float)(ty * gConfig.tileSize), (float)gConfig.tileSize, (float)gConfig.tileSize};
+static Rectangle BlockTileSrc(TilePos pos) {
+	return (Rectangle){(float)(pos.col * gConfig.tileSize), (float)(pos.row * gConfig.tileSize), (float)gConfig.tileSize, (float)gConfig.tileSize};
 }
 
 static Rectangle ChooseRowNoVertical(bool left, bool right) {
-	if (!left && !right) return BlockTileSrc(3, 3); // isolated middle
-	if (!left && right) return BlockTileSrc(0, 3); // left edge
-	if (!right && left) return BlockTileSrc(2, 3); // right edge
-	return BlockTileSrc(1, 3); // middle row
+	if (!left && !right) return BlockTileSrc(gConfig.layout.rowNoVertical_isolated);
+	if (!left && right) return BlockTileSrc(gConfig.layout.rowNoVertical_leftEdge);
+	if (!right && left) return BlockTileSrc(gConfig.layout.rowNoVertical_rightEdge);
+	return BlockTileSrc(gConfig.layout.rowNoVertical_middle);
 }
 
 static Rectangle ChooseTopBand(bool left, bool right, bool downLeft, bool downRight) {
-	if (!left && !right) return BlockTileSrc(3, 0); // isolated top
+	if (!left && !right) return BlockTileSrc(gConfig.layout.topBand_isolated);
 	if (left && right) {
-		if (!downLeft && !downRight) return BlockTileSrc(9, 3); // inner bottom
-		if (!downLeft && downRight) return BlockTileSrc(7, 0); // inner bottom-left
-		if (downLeft && !downRight) return BlockTileSrc(6, 0); // inner bottom-right
-		return BlockTileSrc(1, 0); // top edge
+		if (!downLeft && !downRight) return BlockTileSrc(gConfig.layout.topBand_innerBottom);
+		if (!downLeft && downRight) return BlockTileSrc(gConfig.layout.topBand_innerBottomLeft);
+		if (downLeft && !downRight) return BlockTileSrc(gConfig.layout.topBand_innerBottomRight);
+		return BlockTileSrc(gConfig.layout.topBand_edge);
 	}
 	if (!left) {
-		if (!downRight) return BlockTileSrc(4, 0); // inner bottom-right
-		return BlockTileSrc(0, 0); // top-left corner
+		if (!downRight) return BlockTileSrc(gConfig.layout.topBand_innerBottomRightNoDownRight);
+		return BlockTileSrc(gConfig.layout.topBand_topLeftCorner);
 	}
 	// !right
-	if (!downLeft) return BlockTileSrc(5, 0); // inner bottom-left
-	return BlockTileSrc(2, 0); // top-right corner
+	if (!downLeft) return BlockTileSrc(gConfig.layout.topBand_innerBottomLeftNoDownLeft);
+	return BlockTileSrc(gConfig.layout.topBand_topRightCorner);
 }
 
 static Rectangle ChooseBottomBand(bool left, bool right, bool upLeft, bool upRight) {
-	if (!left && !right) return BlockTileSrc(3, 2); // isolated bottom
+	if (!left && !right) return BlockTileSrc(gConfig.layout.bottomBand_isolated);
 	if (left && right) {
-		if (!upLeft && !upRight) return BlockTileSrc(8, 3); // inner top
-		if (!upLeft && upRight) return BlockTileSrc(7, 1); // inner top-left
-		if (upLeft && !upRight) return BlockTileSrc(6, 1); // inner top-right
-		return BlockTileSrc(1, 2); // bottom edge
+		if (!upLeft && !upRight) return BlockTileSrc(gConfig.layout.bottomBand_innerTop);
+		if (!upLeft && upRight) return BlockTileSrc(gConfig.layout.bottomBand_innerTopLeft);
+		if (upLeft && !upRight) return BlockTileSrc(gConfig.layout.bottomBand_innerTopRight);
+		return BlockTileSrc(gConfig.layout.bottomBand_edge);
 	}
 	if (!left) {
-		if (!upRight) return BlockTileSrc(4, 1); // inner top-right
-		return BlockTileSrc(0, 2); // bottom-left
+		if (!upRight) return BlockTileSrc(gConfig.layout.bottomBand_innerTopRightNoUpRight);
+		return BlockTileSrc(gConfig.layout.bottomBand_bottomLeft);
 	}
 	// !right
-	if (!upLeft) return BlockTileSrc(5, 1); // inner top-left
-	return BlockTileSrc(2, 2); // bottom-right
+	if (!upLeft) return BlockTileSrc(gConfig.layout.bottomBand_innerTopLeftNoUpLeft);
+	return BlockTileSrc(gConfig.layout.bottomBand_bottomRight);
 }
 
 static Rectangle ChooseInteriorWithSides(bool upLeft, bool upRight, bool downLeft, bool downRight) {
-	if (!downLeft && !downRight && !upLeft && !upRight) return BlockTileSrc(8, 1);
-	if (upLeft && upRight && !downLeft && !downRight) return BlockTileSrc(9, 2);
-	if (!upLeft && !downLeft && upRight && downRight) return BlockTileSrc(9, 0);
-	if (upLeft && downLeft && !upRight && !downRight) return BlockTileSrc(8, 0);
-	if (!upLeft && !upRight && !downRight && downLeft) return BlockTileSrc(9, 1);
-	if (!upLeft && !upRight && downRight && !downLeft) return BlockTileSrc(10, 1);
-	if (upLeft && downRight && !upRight && !downLeft) return BlockTileSrc(10, 2);
-	if (!upLeft && !downRight && upRight && downLeft) return BlockTileSrc(10, 3);
-	if (!downRight && !downLeft && !upRight && upLeft) return BlockTileSrc(11, 2);
-	if (!downRight && !downLeft && upRight && !upLeft) return BlockTileSrc(11, 3);
-	if (!upLeft && !upRight) return BlockTileSrc(8, 2);
-	if (!upLeft) return BlockTileSrc(5, 3);
-	if (!upRight) return BlockTileSrc(4, 3);
-	if (!downRight) return BlockTileSrc(4, 2);
-	return BlockTileSrc(1, 1);
+	if (!downLeft && !downRight && !upLeft && !upRight) return BlockTileSrc(gConfig.layout.interior_allDiagonalsOpen);
+	if (upLeft && upRight && !downLeft && !downRight) return BlockTileSrc(gConfig.layout.interior_upDiagonals);
+	if (!upLeft && !downLeft && upRight && downRight) return BlockTileSrc(gConfig.layout.interior_rightDiagonals);
+	if (upLeft && downLeft && !upRight && !downRight) return BlockTileSrc(gConfig.layout.interior_leftDiagonals);
+	if (!upLeft && !upRight && !downRight && downLeft) return BlockTileSrc(gConfig.layout.interior_downLeft);
+	if (!upLeft && !upRight && downRight && !downLeft) return BlockTileSrc(gConfig.layout.interior_downRight);
+	if (upLeft && downRight && !upRight && !downLeft) return BlockTileSrc(gConfig.layout.interior_upLeftDownRight);
+	if (!upLeft && !downRight && upRight && downLeft) return BlockTileSrc(gConfig.layout.interior_upRightDownLeft);
+	if (!downRight && !downLeft && !upRight && upLeft) return BlockTileSrc(gConfig.layout.interior_upLeft);
+	if (!downRight && !downLeft && upRight && !upLeft) return BlockTileSrc(gConfig.layout.interior_upRight);
+	if (!upLeft && !upRight) return BlockTileSrc(gConfig.layout.interior_upDiagonalsOpen);
+	if (!upLeft) return BlockTileSrc(gConfig.layout.interior_upLeftOpen);
+	if (!upRight) return BlockTileSrc(gConfig.layout.interior_upRightOpen);
+	if (!downRight) return BlockTileSrc(gConfig.layout.interior_downRightOpen);
+	return BlockTileSrc(gConfig.layout.interior_full);
 }
 
 static Rectangle ChooseOpenLeft(bool upRight, bool downRight) {
-	if (!upRight && !downRight) return BlockTileSrc(4, 0);
-	if (!downRight) return BlockTileSrc(6, 2);
-	if (!upRight) return BlockTileSrc(6, 3);
-	return BlockTileSrc(0, 1);
+	if (!upRight && !downRight) return BlockTileSrc(gConfig.layout.openLeft_allOpen);
+	if (!downRight) return BlockTileSrc(gConfig.layout.openLeft_downRightOpen);
+	if (!upRight) return BlockTileSrc(gConfig.layout.openLeft_upRightOpen);
+	return BlockTileSrc(gConfig.layout.openLeft_leftEdge);
 }
 
 static Rectangle ChooseOpenRight(bool upLeft, bool downLeft) {
-	if (!upLeft && !downLeft) return BlockTileSrc(5, 0);
-	if (!downLeft) return BlockTileSrc(7, 2);
-	if (!upLeft) return BlockTileSrc(7, 3);
-	return BlockTileSrc(2, 1);
+	if (!upLeft && !downLeft) return BlockTileSrc(gConfig.layout.openRight_allOpen);
+	if (!downLeft) return BlockTileSrc(gConfig.layout.openRight_downLeftOpen);
+	if (!upLeft) return BlockTileSrc(gConfig.layout.openRight_upLeftOpen);
+	return BlockTileSrc(gConfig.layout.openRight_rightEdge);
 }
 
 Rectangle Autotiler_GetBlockTile(const void *context, int cx, int cy) {
@@ -123,7 +123,7 @@ Rectangle Autotiler_GetBlockTile(const void *context, int cx, int cy) {
 	if (!right && left) {
 		return ChooseOpenRight(upLeft, downLeft);
 	}
-	if (!right && !left) return BlockTileSrc(3, 1);
+	if (!right && !left) return BlockTileSrc(gConfig.layout.isolated_vertical);
 
-	return BlockTileSrc(1, 1);
+	return BlockTileSrc(gConfig.layout.isolated_full);
 }

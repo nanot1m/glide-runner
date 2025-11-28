@@ -267,10 +267,66 @@ bool Render_Init(void) {
 			gBlockTileCols = gBlockTileset.width / BLOCK_TILE_SIZE;
 		}
 	}
-	// Initialize autotiler
+	// Initialize autotiler with tilemap layout
+	TilemapLayout layout = {
+	    // Row with no vertical neighbors
+	    .rowNoVertical_isolated = {3, 3},
+	    .rowNoVertical_leftEdge = {0, 3},
+	    .rowNoVertical_rightEdge = {2, 3},
+	    .rowNoVertical_middle = {1, 3},
+	    // Top band
+	    .topBand_isolated = {3, 0},
+	    .topBand_innerBottom = {9, 3},
+	    .topBand_innerBottomLeft = {7, 0},
+	    .topBand_innerBottomRight = {6, 0},
+	    .topBand_edge = {1, 0},
+	    .topBand_innerBottomRightNoDownRight = {4, 0},
+	    .topBand_topLeftCorner = {0, 0},
+	    .topBand_innerBottomLeftNoDownLeft = {5, 0},
+	    .topBand_topRightCorner = {2, 0},
+	    // Bottom band
+	    .bottomBand_isolated = {3, 2},
+	    .bottomBand_innerTop = {8, 3},
+	    .bottomBand_innerTopLeft = {7, 1},
+	    .bottomBand_innerTopRight = {6, 1},
+	    .bottomBand_edge = {1, 2},
+	    .bottomBand_innerTopRightNoUpRight = {4, 1},
+	    .bottomBand_bottomLeft = {0, 2},
+	    .bottomBand_innerTopLeftNoUpLeft = {5, 1},
+	    .bottomBand_bottomRight = {2, 2},
+	    // Interior with sides
+	    .interior_allDiagonalsOpen = {8, 1},
+	    .interior_upDiagonals = {9, 2},
+	    .interior_rightDiagonals = {9, 0},
+	    .interior_leftDiagonals = {8, 0},
+	    .interior_downLeft = {9, 1},
+	    .interior_downRight = {10, 1},
+	    .interior_upLeftDownRight = {10, 2},
+	    .interior_upRightDownLeft = {10, 3},
+	    .interior_upLeft = {11, 2},
+	    .interior_upRight = {11, 3},
+	    .interior_upDiagonalsOpen = {8, 2},
+	    .interior_upLeftOpen = {5, 3},
+	    .interior_upRightOpen = {4, 3},
+	    .interior_downRightOpen = {4, 2},
+	    .interior_full = {1, 1},
+	    // Open left
+	    .openLeft_allOpen = {4, 0},
+	    .openLeft_downRightOpen = {6, 2},
+	    .openLeft_upRightOpen = {6, 3},
+	    .openLeft_leftEdge = {0, 1},
+	    // Open right
+	    .openRight_allOpen = {5, 0},
+	    .openRight_downLeftOpen = {7, 2},
+	    .openRight_upLeftOpen = {7, 3},
+	    .openRight_rightEdge = {2, 1},
+	    // Isolated tiles
+	    .isolated_vertical = {3, 1},
+	    .isolated_full = {1, 1}};
 	AutotilerConfig autotilerConfig = {
 	    .tileSize = BLOCK_TILE_SIZE,
-	    .checkBlock = CheckBlockForAutotiler};
+	    .checkBlock = CheckBlockForAutotiler,
+	    .layout = layout};
 	bool autotilerReady = Autotiler_Init(&autotilerConfig);
 	Dust_Reset();
 	// Return success if at least one of the core sprites loaded; fallback drawing still works
