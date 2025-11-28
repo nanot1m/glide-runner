@@ -271,11 +271,11 @@ bool Render_Init(void) {
 	AutotilerConfig autotilerConfig = {
 	    .tileSize = BLOCK_TILE_SIZE,
 	    .checkBlock = CheckBlockForAutotiler};
-	Autotiler_Init(&autotilerConfig);
+	bool autotilerReady = Autotiler_Init(&autotilerConfig);
 	Dust_Reset();
 	// Return success if at least one of the core sprites loaded; fallback drawing still works
 	bool spritesReady = (gIdleTex.id != 0) && (gRunTex.id != 0) && (gIdleTexL.id != 0) && (gRunTexL.id != 0);
-	return spritesReady;
+	return spritesReady && autotilerReady;
 }
 
 void Render_Deinit(void) {

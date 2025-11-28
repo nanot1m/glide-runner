@@ -14,7 +14,8 @@ typedef struct {
 } AutotilerConfig;
 
 // Initialize autotiler with configuration
-void Autotiler_Init(const AutotilerConfig *config);
+// Returns true if initialization was successful, false otherwise
+bool Autotiler_Init(const AutotilerConfig *config);
 
 // Get the source rectangle for a block at the given cell coordinates
 // Based on the neighboring blocks, returns the appropriate tile from the tileset

@@ -5,10 +5,12 @@
 
 static AutotilerConfig gConfig = {0};
 
-void Autotiler_Init(const AutotilerConfig *config) {
+bool Autotiler_Init(const AutotilerConfig *config) {
 	if (config != NULL && config->checkBlock != NULL && config->tileSize > 0) {
 		gConfig = *config;
+		return true;
 	}
+	return false;
 }
 
 static inline bool IsBlockAt(const void *context, int cx, int cy) {
