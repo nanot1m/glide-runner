@@ -9,6 +9,8 @@
 void FpsMeter_Init(void) {}
 void FpsMeter_BeginFrame(void) {}
 void FpsMeter_Draw(void) {}
+void FpsMeter_SetEnabled(bool enabled) { (void)enabled; }
+bool FpsMeter_IsEnabled(void) { return false; }
 
 #else
 
@@ -29,6 +31,7 @@ static int gHead = 0;
 static int gCount = 0;
 static float gLabelFps = 0.0f;
 static float gLastLabelTime = 0.0f;
+static bool gEnabled = true;
 
 static int IndexAt(int offset) { return (gHead + offset) % FPS_MAX_SAMPLES; }
 
@@ -45,9 +48,11 @@ void FpsMeter_Init(void) {
 	gCount = 0;
 	gLabelFps = 0.0f;
 	gLastLabelTime = 0.0f;
+	gEnabled = true;
 }
 
 void FpsMeter_BeginFrame(void) {
+	if (!gEnabled) return;
 	float now = (float)GetTime();
 	float dt = GetFrameTime();
 	float fps = (dt > 0.0001f) ? (1.0f / dt) : (float)GetFPS();
@@ -76,6 +81,7 @@ static float HistoryMaxFps(float now) {
 }
 
 void FpsMeter_Draw(void) {
+	if (!gEnabled) return;
 	if (gCount < 2) return;
 	float now = (float)GetTime();
 	PruneOld(now);
@@ -130,5 +136,8 @@ void FpsMeter_Draw(void) {
 		havePrev = true;
 	}
 }
+
+void FpsMeter_SetEnabled(bool enabled) { gEnabled = enabled; }
+bool FpsMeter_IsEnabled(void) { return gEnabled; }
 
 #endif // ENABLE_FPS_METER

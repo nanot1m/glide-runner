@@ -144,6 +144,13 @@ static InputAction ActionByName(const char *name) {
 	return ACT__COUNT;
 }
 
+static const char *KeyNameFromKey(int key) {
+	for (size_t i = 0; i < sizeof(KEY_NAMES) / sizeof(KEY_NAMES[0]); ++i) {
+		if (KEY_NAMES[i].key == key) return KEY_NAMES[i].name;
+	}
+	return NULL;
+}
+
 static void TryLoadFile(const char *path) {
 	FILE *f = fopen(path, "r");
 	if (!f) return;
@@ -263,4 +270,55 @@ bool InputPressed(InputAction a) {
 	for (int i = 0; i < kl->count; i++)
 		if (IsKeyPressed(kl->keys[i])) return true;
 	return gVirtualPressed[a];
+}
+
+const char *InputConfig_ActionLabel(InputAction a) {
+	switch (a) {
+	case ACT_ACTIVATE: return "Activate";
+	case ACT_BACK: return "Back";
+	case ACT_NAV_UP: return "Navigate Up";
+	case ACT_NAV_DOWN: return "Navigate Down";
+	case ACT_NAV_LEFT: return "Navigate Left";
+	case ACT_NAV_RIGHT: return "Navigate Right";
+	case ACT_LEFT: return "Left";
+	case ACT_RIGHT: return "Right";
+	case ACT_DOWN: return "Down";
+	case ACT_JUMP: return "Jump";
+	default: return NULL;
+	}
+}
+
+const char *InputConfig_PrimaryKeyName(InputAction a) {
+	if (a < 0 || a >= ACT__COUNT) return NULL;
+	KeyList *kl = &gActions[a];
+	if (kl->count <= 0) return NULL;
+	return KeyNameFromKey(kl->keys[0]);
+}
+
+const char *InputConfig_KeyName(int key) { return KeyNameFromKey(key); }
+
+void InputConfig_SetSingleKey(InputAction a, int key) {
+	if (a < 0 || a >= ACT__COUNT) return;
+	if (KeyNameFromKey(key) == NULL) return;
+	gActions[a].count = 0;
+	AddKey(a, key);
+}
+
+void InputConfig_Save(void) {
+	FILE *f = fopen("config/input.cfg", "w");
+	if (!f) return;
+	for (int a = 0; a < ACT__COUNT; ++a) {
+		const char *name = ActionName((InputAction)a);
+		if (!name) continue;
+		fprintf(f, "%s = ", name);
+		KeyList *kl = &gActions[a];
+		for (int i = 0; i < kl->count; ++i) {
+			const char *kn = KeyNameFromKey(kl->keys[i]);
+			if (!kn) continue;
+			fprintf(f, "%s", kn);
+			if (i < kl->count - 1) fprintf(f, " | ");
+		}
+		fprintf(f, "\n");
+	}
+	fclose(f);
 }

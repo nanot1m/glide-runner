@@ -33,7 +33,7 @@ WEB_LIBS = $(RAYLIB_WEB_LIB)
 WEB_OUTPUT_DIR = web
 WEB_SHELL ?= web_shell.html
 
-SRCS = app.c game.c level.c ui.c audio.c render.c editor.c menu.c input_config.c fps_meter.c
+SRCS = app.c game.c level.c ui.c audio.c render.c editor.c menu.c input_config.c fps_meter.c settings.c
 OBJS = $(SRCS:.c=.o)
 
 all: main

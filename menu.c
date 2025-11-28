@@ -10,6 +10,7 @@ static const char *gMenuItems[MENU_OPTION_COUNT] = {
     "> Play level",
     "> Create new level",
     "> Edit existing level",
+    "> Settings",
 };
 
 static const char *MenuLabelAtCB(int i, void *ud) {
@@ -32,6 +33,8 @@ void UpdateMenu(ScreenState *screen, int *selected) {
 			*screen = SCREEN_LEVEL_EDITOR;
 		} else if (*selected == MENU_PLAY_LEVEL) {
 			*screen = SCREEN_SELECT_PLAY;
+		} else if (*selected == MENU_SETTINGS) {
+			*screen = SCREEN_SETTINGS;
 		}
 	}
 }

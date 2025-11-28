@@ -4,11 +4,12 @@
 #include "audio.h"
 #include "config.h"
 #include "editor.h"
+#include "fps_meter.h"
 #include "game.h"
 #include "input_config.h"
 #include "level.h"
 #include "menu.h"
-#include "fps_meter.h"
+#include "settings.h"
 #include "raylib.h"
 #include "render.h"
 #include "screens.h"
@@ -119,6 +120,21 @@ int main(void) {
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderLevelList("Select a level to play");
+			FpsMeter_Draw();
+			EndDrawing();
+			break;
+		}
+
+		case SCREEN_SETTINGS: {
+			if (InputPressed(ACT_BACK)) {
+				InputGate_RequestBlockOnce();
+				screen = SCREEN_MENU;
+				break;
+			}
+			UpdateSettings(&screen);
+			BeginDrawing();
+			ClearBackground(RAYWHITE);
+			RenderSettings();
 			FpsMeter_Draw();
 			EndDrawing();
 			break;
