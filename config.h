@@ -15,6 +15,9 @@
 #define WINDOW_WIDTH (GRID_COLS * SQUARE_SIZE)
 #define WINDOW_HEIGHT (GRID_ROWS * SQUARE_SIZE)
 
+// Feature toggles
+#define ENABLE_FPS_METER 1
+
 // Timing
 #define BASE_FPS 120.0f
 #define BASE_DT (1.0f / BASE_FPS)

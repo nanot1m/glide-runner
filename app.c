@@ -8,6 +8,7 @@
 #include "input_config.h"
 #include "level.h"
 #include "menu.h"
+#include "fps_meter.h"
 #include "raylib.h"
 #include "render.h"
 #include "screens.h"
@@ -44,7 +45,7 @@ int main(void) {
 	Audio_Init();
 	InputConfig_Init();
 	SetExitKey(0);
-	SetTargetFPS(120);
+	FpsMeter_Init();
 
 	GameState game = {0};
 	game.facingRight = true;
@@ -61,6 +62,7 @@ int main(void) {
 	bool gameLevelLoaded = false;
 
 	while (!WindowShouldClose()) {
+		FpsMeter_BeginFrame();
 		InputConfig_UpdateTouch();
 		switch (screen) {
 		case SCREEN_MENU:
@@ -68,6 +70,7 @@ int main(void) {
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderMenu(menuSelected);
+			FpsMeter_Draw();
 			EndDrawing();
 			break;
 
@@ -91,6 +94,7 @@ int main(void) {
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderLevelList("Select a level to edit");
+			FpsMeter_Draw();
 			EndDrawing();
 			break;
 		}
@@ -115,6 +119,7 @@ int main(void) {
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderLevelList("Select a level to play");
+			FpsMeter_Draw();
 			EndDrawing();
 			break;
 		}
@@ -143,6 +148,7 @@ int main(void) {
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderLevelEditor(&game);
+			FpsMeter_Draw();
 			EndDrawing();
 			break;
 		}
@@ -159,6 +165,7 @@ int main(void) {
 				BeginDrawing();
 				ClearBackground(RAYWHITE);
 				RenderGame(&game);
+				FpsMeter_Draw();
 				EndDrawing();
 				break;
 			}
@@ -179,6 +186,7 @@ int main(void) {
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderGame(&game);
+			FpsMeter_Draw();
 			EndDrawing();
 			break;
 		}
@@ -195,6 +203,7 @@ int main(void) {
 				BeginDrawing();
 				ClearBackground(RAYWHITE);
 				RenderGame(&game);
+				FpsMeter_Draw();
 				EndDrawing();
 				break;
 			}
@@ -211,6 +220,7 @@ int main(void) {
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderGame(&game);
+			FpsMeter_Draw();
 			EndDrawing();
 			if (Game_Victory()) { screen = SCREEN_VICTORY; }
 			break;
@@ -234,6 +244,7 @@ int main(void) {
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderDeath();
+			FpsMeter_Draw();
 			EndDrawing();
 			break;
 		}
@@ -256,6 +267,7 @@ int main(void) {
 			BeginDrawing();
 			ClearBackground(RAYWHITE);
 			RenderVictory(&game);
+			FpsMeter_Draw();
 			EndDrawing();
 			break;
 		}

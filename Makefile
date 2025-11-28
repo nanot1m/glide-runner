@@ -6,7 +6,7 @@ RAYLIB_SRC := $(RAYLIB_DIR)/src
 RAYLIB_LIB := $(RAYLIB_SRC)/libraylib.a
 
 # Host (native) build settings (use vendored raylib)
-CFLAGS = -I$(RAYLIB_SRC) -std=c99 -Wall -Wextra -Wno-unused-parameter
+CFLAGS = -I$(RAYLIB_SRC) -std=c99 -Wall -Wextra -Wno-unused-parameter -O2 -DNDEBUG
 
 # Platform-specific system libs for raylib
 UNAME_S := $(shell uname -s)
@@ -33,7 +33,7 @@ WEB_LIBS = $(RAYLIB_WEB_LIB)
 WEB_OUTPUT_DIR = web
 WEB_SHELL ?= web_shell.html
 
-SRCS = app.c game.c level.c ui.c audio.c render.c editor.c menu.c input_config.c
+SRCS = app.c game.c level.c ui.c audio.c render.c editor.c menu.c input_config.c fps_meter.c
 OBJS = $(SRCS:.c=.o)
 
 all: main
