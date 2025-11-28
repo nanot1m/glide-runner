@@ -9,10 +9,10 @@
 #include "input_config.h"
 #include "level.h"
 #include "menu.h"
-#include "settings.h"
 #include "raylib.h"
 #include "render.h"
 #include "screens.h"
+#include "settings.h"
 #include "ui.h"
 
 static const UiListSpec LIST_SPEC = {.startY = 70.0f, .stepY = 30.0f, .itemHeight = 24.0f, .fontSize = 24};

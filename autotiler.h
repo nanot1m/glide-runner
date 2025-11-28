@@ -9,7 +9,7 @@ typedef bool (*AutotilerCheckBlockFunc)(void *context, int cx, int cy);
 
 // Autotiler configuration
 typedef struct {
-	int tileSize;           // Size of each tile in the tileset (e.g., 32 pixels)
+	int tileSize; // Size of each tile in the tileset (e.g., 32 pixels)
 	AutotilerCheckBlockFunc checkBlock; // Function to check if block exists at position
 } AutotilerConfig;
 

@@ -1,8 +1,8 @@
 #include "render.h"
 #include <math.h>
 #include <string.h>
-#include "raylib.h"
 #include "autotiler.h"
+#include "raylib.h"
 
 static Texture2D gBlockTileset = {0};
 static const int BLOCK_TILE_SIZE = 32;
@@ -269,9 +269,8 @@ bool Render_Init(void) {
 	}
 	// Initialize autotiler
 	AutotilerConfig autotilerConfig = {
-		.tileSize = BLOCK_TILE_SIZE,
-		.checkBlock = CheckBlockForAutotiler
-	};
+	    .tileSize = BLOCK_TILE_SIZE,
+	    .checkBlock = CheckBlockForAutotiler};
 	Autotiler_Init(&autotilerConfig);
 	Dust_Reset();
 	// Return success if at least one of the core sprites loaded; fallback drawing still works

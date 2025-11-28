@@ -1,6 +1,6 @@
 #include "autotiler.h"
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "raylib.h"
 
 static AutotilerConfig gConfig = {0};

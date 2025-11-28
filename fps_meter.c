@@ -1,6 +1,6 @@
 #include "fps_meter.h"
-#include <stdbool.h>
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #ifndef _WIN32
