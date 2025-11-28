@@ -6,12 +6,12 @@
 static AutotilerConfig gConfig = {0};
 
 void Autotiler_Init(const AutotilerConfig *config) {
-	if (config != NULL) {
+	if (config != NULL && config->checkBlock != NULL && config->tileSize > 0) {
 		gConfig = *config;
 	}
 }
 
-static inline bool IsBlockAt(void *context, int cx, int cy) {
+static inline bool IsBlockAt(const void *context, int cx, int cy) {
 	if (gConfig.checkBlock == NULL) return false;
 	return gConfig.checkBlock(context, cx, cy);
 }
@@ -93,7 +93,7 @@ static Rectangle ChooseOpenRight(bool upLeft, bool downLeft) {
 	return BlockTileSrc(2, 1);
 }
 
-Rectangle Autotiler_GetBlockTile(void *context, int cx, int cy) {
+Rectangle Autotiler_GetBlockTile(const void *context, int cx, int cy) {
 	bool up = IsBlockAt(context, cx, cy - 1);
 	bool down = IsBlockAt(context, cx, cy + 1);
 	bool left = IsBlockAt(context, cx - 1, cy);

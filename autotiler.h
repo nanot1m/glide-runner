@@ -5,7 +5,7 @@
 
 // Callback function type to check if a block exists at given cell coordinates
 // Returns true if there's a solid block at (cx, cy), false otherwise
-typedef bool (*AutotilerCheckBlockFunc)(void *context, int cx, int cy);
+typedef bool (*AutotilerCheckBlockFunc)(const void *context, int cx, int cy);
 
 // Autotiler configuration
 typedef struct {
@@ -21,4 +21,4 @@ void Autotiler_Init(const AutotilerConfig *config);
 // context: Context to pass to the checkBlock function
 // cx, cy: cell coordinates of the block to get the tile for
 // Returns: Rectangle describing the source region in the tileset texture
-Rectangle Autotiler_GetBlockTile(void *context, int cx, int cy);
+Rectangle Autotiler_GetBlockTile(const void *context, int cx, int cy);

@@ -31,7 +31,7 @@ Rectangle LaserCollisionRect(Vector2 laserPos) {
 }
 
 // Callback function for autotiler to check if a block exists
-static bool CheckBlockForAutotiler(void *context, int cx, int cy) {
+static bool CheckBlockForAutotiler(const void *context, int cx, int cy) {
 	const LevelEditorState *ed = (const LevelEditorState *)context;
 	if (!InBoundsCell(cx, cy)) return false;
 	return IsSolidTile(ed->tiles[cy][cx]);
@@ -39,7 +39,7 @@ static bool CheckBlockForAutotiler(void *context, int cx, int cy) {
 
 static Rectangle ChooseBlockSrc(const LevelEditorState *ed, int cx, int cy) {
 	// Pass context directly to autotiler
-	return Autotiler_GetBlockTile((void *)ed, cx, cy);
+	return Autotiler_GetBlockTile(ed, cx, cy);
 }
 
 static void DrawBlock(Rectangle dest, Rectangle srcOverride) {
