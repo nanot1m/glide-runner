@@ -316,17 +316,28 @@ bool InputPressed(InputAction a) {
 
 const char *InputConfig_ActionLabel(InputAction a) {
 	switch (a) {
-	case ACT_ACTIVATE: return "Activate";
-	case ACT_BACK: return "Back";
-	case ACT_NAV_UP: return "Navigate Up";
-	case ACT_NAV_DOWN: return "Navigate Down";
-	case ACT_NAV_LEFT: return "Navigate Left";
-	case ACT_NAV_RIGHT: return "Navigate Right";
-	case ACT_LEFT: return "Left";
-	case ACT_RIGHT: return "Right";
-	case ACT_DOWN: return "Down";
-	case ACT_JUMP: return "Jump";
-	default: return NULL;
+	case ACT_ACTIVATE:
+		return "Activate";
+	case ACT_BACK:
+		return "Back";
+	case ACT_NAV_UP:
+		return "Navigate Up";
+	case ACT_NAV_DOWN:
+		return "Navigate Down";
+	case ACT_NAV_LEFT:
+		return "Navigate Left";
+	case ACT_NAV_RIGHT:
+		return "Navigate Right";
+	case ACT_LEFT:
+		return "Left";
+	case ACT_RIGHT:
+		return "Right";
+	case ACT_DOWN:
+		return "Down";
+	case ACT_JUMP:
+		return "Jump";
+	default:
+		return NULL;
 	}
 }
 

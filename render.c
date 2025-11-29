@@ -1,6 +1,7 @@
 #include "render.h"
 #include <math.h>
 #include <string.h>
+#include "autotiler.h"
 #include "raylib.h"
 
 static Texture2D gBlockTileset = {0};
@@ -29,119 +30,16 @@ Rectangle LaserCollisionRect(Vector2 laserPos) {
 	return (Rectangle){laserPos.x, laserPos.y + LASER_STRIPE_OFFSET, (float)SQUARE_SIZE - 1.0f, LASER_STRIPE_THICKNESS};
 }
 
-static inline bool IsBlockAt(const LevelEditorState *ed, int cx, int cy) {
+// Callback function for autotiler to check if a block exists
+static bool CheckBlockForAutotiler(const void *context, int cx, int cy) {
+	const LevelEditorState *ed = (const LevelEditorState *)context;
 	if (!InBoundsCell(cx, cy)) return false;
 	return IsSolidTile(ed->tiles[cy][cx]);
 }
 
-static Rectangle BlockTileSrc(int tx, int ty) {
-	return (Rectangle){(float)(tx * BLOCK_TILE_SIZE), (float)(ty * BLOCK_TILE_SIZE), (float)BLOCK_TILE_SIZE, (float)BLOCK_TILE_SIZE};
-}
-
-static Rectangle ChooseRowNoVertical(bool left, bool right) {
-	if (!left && !right) return BlockTileSrc(3, 3); // isolated middle
-	if (!left && right) return BlockTileSrc(0, 3); // left edge
-	if (!right && left) return BlockTileSrc(2, 3); // right edge
-	return BlockTileSrc(1, 3); // middle row
-}
-
-static Rectangle ChooseTopBand(bool left, bool right, bool downLeft, bool downRight) {
-	if (!left && !right) return BlockTileSrc(3, 0); // isolated top
-	if (left && right) {
-		if (!downLeft && !downRight) return BlockTileSrc(9, 3); // inner bottom
-		if (!downLeft && downRight) return BlockTileSrc(7, 0); // inner bottom-left
-		if (downLeft && !downRight) return BlockTileSrc(6, 0); // inner bottom-right
-		return BlockTileSrc(1, 0); // top edge
-	}
-	if (!left) {
-		if (!downRight) return BlockTileSrc(4, 0); // inner bottom-right
-		return BlockTileSrc(0, 0); // top-left corner
-	}
-	// !right
-	if (!downLeft) return BlockTileSrc(5, 0); // inner bottom-left
-	return BlockTileSrc(2, 0); // top-right corner
-}
-
-static Rectangle ChooseBottomBand(bool left, bool right, bool upLeft, bool upRight) {
-	if (!left && !right) return BlockTileSrc(3, 2); // isolated bottom
-	if (left && right) {
-		if (!upLeft && !upRight) return BlockTileSrc(8, 3); // inner top
-		if (!upLeft && upRight) return BlockTileSrc(7, 1); // inner top-left
-		if (upLeft && !upRight) return BlockTileSrc(6, 1); // inner top-right
-		return BlockTileSrc(1, 2); // bottom edge
-	}
-	if (!left) {
-		if (!upRight) return BlockTileSrc(4, 1); // inner top-right
-		return BlockTileSrc(0, 2); // bottom-left
-	}
-	// !right
-	if (!upLeft) return BlockTileSrc(5, 1); // inner top-left
-	return BlockTileSrc(2, 2); // bottom-right
-}
-
-static Rectangle ChooseInteriorWithSides(bool upLeft, bool upRight, bool downLeft, bool downRight) {
-	if (!downLeft && !downRight && !upLeft && !upRight) return BlockTileSrc(8, 1);
-	if (upLeft && upRight && !downLeft && !downRight) return BlockTileSrc(9, 2);
-	if (!upLeft && !downLeft && upRight && downRight) return BlockTileSrc(9, 0);
-	if (upLeft && downLeft && !upRight && !downRight) return BlockTileSrc(8, 0);
-	if (!upLeft && !upRight && !downRight && downLeft) return BlockTileSrc(9, 1);
-	if (!upLeft && !upRight && downRight && !downLeft) return BlockTileSrc(10, 1);
-	if (upLeft && downRight && !upRight && !downLeft) return BlockTileSrc(10, 2);
-	if (!upLeft && !downRight && upRight && downLeft) return BlockTileSrc(10, 3);
-	if (!downRight && !downLeft && !upRight && upLeft) return BlockTileSrc(11, 2);
-	if (!downRight && !downLeft && upRight && !upLeft) return BlockTileSrc(11, 3);
-	if (!upLeft && !upRight) return BlockTileSrc(8, 2);
-	if (!upLeft) return BlockTileSrc(5, 3);
-	if (!upRight) return BlockTileSrc(4, 3);
-	if (!downRight) return BlockTileSrc(4, 2);
-	return BlockTileSrc(1, 1);
-}
-
-static Rectangle ChooseOpenLeft(bool upRight, bool downRight) {
-	if (!upRight && !downRight) return BlockTileSrc(4, 0);
-	if (!downRight) return BlockTileSrc(6, 2);
-	if (!upRight) return BlockTileSrc(6, 3);
-	return BlockTileSrc(0, 1);
-}
-
-static Rectangle ChooseOpenRight(bool upLeft, bool downLeft) {
-	if (!upLeft && !downLeft) return BlockTileSrc(5, 0);
-	if (!downLeft) return BlockTileSrc(7, 2);
-	if (!upLeft) return BlockTileSrc(7, 3);
-	return BlockTileSrc(2, 1);
-}
-
 static Rectangle ChooseBlockSrc(const LevelEditorState *ed, int cx, int cy) {
-	bool up = IsBlockAt(ed, cx, cy - 1);
-	bool down = IsBlockAt(ed, cx, cy + 1);
-	bool left = IsBlockAt(ed, cx - 1, cy);
-	bool right = IsBlockAt(ed, cx + 1, cy);
-	bool upLeft = IsBlockAt(ed, cx - 1, cy - 1);
-	bool upRight = IsBlockAt(ed, cx + 1, cy - 1);
-	bool downLeft = IsBlockAt(ed, cx - 1, cy + 1);
-	bool downRight = IsBlockAt(ed, cx + 1, cy + 1);
-
-	if (!up && !down) {
-		return ChooseRowNoVertical(left, right);
-	}
-	if (!up) {
-		return ChooseTopBand(left, right, downLeft, downRight);
-	}
-	if (!down) {
-		return ChooseBottomBand(left, right, upLeft, upRight);
-	}
-	if (left && right) {
-		return ChooseInteriorWithSides(upLeft, upRight, downLeft, downRight);
-	}
-	if (!left && right) {
-		return ChooseOpenLeft(upRight, downRight);
-	}
-	if (!right && left) {
-		return ChooseOpenRight(upLeft, downLeft);
-	}
-	if (!right && !left) return BlockTileSrc(3, 1);
-
-	return BlockTileSrc(1, 1);
+	// Pass context directly to autotiler
+	return Autotiler_GetBlockTile(ed, cx, cy);
 }
 
 static void DrawBlock(Rectangle dest, Rectangle srcOverride) {
@@ -369,10 +267,71 @@ bool Render_Init(void) {
 			gBlockTileCols = gBlockTileset.width / BLOCK_TILE_SIZE;
 		}
 	}
+	// Initialize autotiler with tilemap layout
+	TilemapLayout layout = {
+	    // Row with no vertical neighbors
+	    .rowNoVertical_isolated = {3, 3},
+	    .rowNoVertical_leftEdge = {0, 3},
+	    .rowNoVertical_rightEdge = {2, 3},
+	    .rowNoVertical_middle = {1, 3},
+	    // Top band
+	    .topBand_isolated = {3, 0},
+	    .topBand_innerBottom = {9, 3},
+	    .topBand_innerBottomLeft = {7, 0},
+	    .topBand_innerBottomRight = {6, 0},
+	    .topBand_edge = {1, 0},
+	    .topBand_innerBottomRightNoDownRight = {4, 0},
+	    .topBand_topLeftCorner = {0, 0},
+	    .topBand_innerBottomLeftNoDownLeft = {5, 0},
+	    .topBand_topRightCorner = {2, 0},
+	    // Bottom band
+	    .bottomBand_isolated = {3, 2},
+	    .bottomBand_innerTop = {8, 3},
+	    .bottomBand_innerTopLeft = {7, 1},
+	    .bottomBand_innerTopRight = {6, 1},
+	    .bottomBand_edge = {1, 2},
+	    .bottomBand_innerTopRightNoUpRight = {4, 1},
+	    .bottomBand_bottomLeft = {0, 2},
+	    .bottomBand_innerTopLeftNoUpLeft = {5, 1},
+	    .bottomBand_bottomRight = {2, 2},
+	    // Interior with sides
+	    .interior_allDiagonalsOpen = {8, 1},
+	    .interior_upDiagonals = {9, 2},
+	    .interior_rightDiagonals = {9, 0},
+	    .interior_leftDiagonals = {8, 0},
+	    .interior_downLeft = {9, 1},
+	    .interior_downRight = {10, 1},
+	    .interior_upLeftDownRight = {10, 2},
+	    .interior_upRightDownLeft = {10, 3},
+	    .interior_upLeft = {11, 2},
+	    .interior_upRight = {11, 3},
+	    .interior_upDiagonalsOpen = {8, 2},
+	    .interior_upLeftOpen = {5, 3},
+	    .interior_upRightOpen = {4, 3},
+	    .interior_downRightOpen = {4, 2},
+	    .interior_full = {1, 1},
+	    // Open left
+	    .openLeft_allOpen = {4, 0},
+	    .openLeft_downRightOpen = {6, 2},
+	    .openLeft_upRightOpen = {6, 3},
+	    .openLeft_leftEdge = {0, 1},
+	    // Open right
+	    .openRight_allOpen = {5, 0},
+	    .openRight_downLeftOpen = {7, 2},
+	    .openRight_upLeftOpen = {7, 3},
+	    .openRight_rightEdge = {2, 1},
+	    // Isolated tiles
+	    .isolated_vertical = {3, 1},
+	    .isolated_full = {1, 1}};
+	AutotilerConfig autotilerConfig = {
+	    .tileSize = BLOCK_TILE_SIZE,
+	    .checkBlock = CheckBlockForAutotiler,
+	    .layout = layout};
+	bool autotilerReady = Autotiler_Init(&autotilerConfig);
 	Dust_Reset();
 	// Return success if at least one of the core sprites loaded; fallback drawing still works
 	bool spritesReady = (gIdleTex.id != 0) && (gRunTex.id != 0) && (gIdleTexL.id != 0) && (gRunTexL.id != 0);
-	return spritesReady;
+	return spritesReady && autotilerReady;
 }
 
 void Render_Deinit(void) {
