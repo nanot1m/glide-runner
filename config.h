@@ -64,6 +64,10 @@
 #define ROGUE_ENEMY_H ((float)SQUARE_SIZE * 0.75f)
 #define ROGUE_STOMP_BOUNCE_SPEED -520.0f
 #define ROGUE_STOMP_GRACE 10.0f
+#define ROGUE_PLAYER_HEALTH 3
+#define ROGUE_INVINCIBILITY_TIME 1.5f
+#define ROGUE_KNOCKBACK_FORCE_X 400.0f
+#define ROGUE_KNOCKBACK_FORCE_Y -300.0f
 
 // Warrior anim tuning
 #define ANIM_DASH_SPEED_FRAC 1.2f // fraction of MAX_SPEED_X to consider dash (keep run anim at normal cap)

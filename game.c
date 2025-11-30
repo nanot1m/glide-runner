@@ -39,16 +39,16 @@ typedef struct {
 } WarriorClipDims;
 
 static const WarriorClipDims kDimsIdle = {20.0f, 33.0f};
-static const WarriorClipDims kDimsRun = {30.0f, 31.0f};
-static const WarriorClipDims kDimsDeath = {44.0f, 43.0f};
-static const WarriorClipDims kDimsHurt = {23.0f, 32.0f};
+static const WarriorClipDims kDimsRun = {20.0f, 31.0f}; // Reduced from 30.0f
+static const WarriorClipDims kDimsDeath = {20.0f, 43.0f}; // Reduced from 44.0f
+static const WarriorClipDims kDimsHurt = {20.0f, 32.0f}; // Reduced from 23.0f
 static const WarriorClipDims kDimsJump = {20.0f, 33.0f};
-static const WarriorClipDims kDimsUpToFall = {21.0f, 32.0f};
-static const WarriorClipDims kDimsFall = {21.0f, 34.0f};
-static const WarriorClipDims kDimsWall = {16.0f, 36.0f};
-static const WarriorClipDims kDimsCrouch = {21.0f, 24.0f};
-static const WarriorClipDims kDimsDash = {35.0f, 31.0f};
-static const WarriorClipDims kDimsSlide = {36.0f, 24.0f};
+static const WarriorClipDims kDimsUpToFall = {20.0f, 32.0f}; // Reduced from 21.0f
+static const WarriorClipDims kDimsFall = {20.0f, 34.0f}; // Reduced from 21.0f
+static const WarriorClipDims kDimsWall = {20.0f, 36.0f}; // Increased from 16.0f
+static const WarriorClipDims kDimsCrouch = {20.0f, 24.0f}; // Reduced from 21.0f
+static const WarriorClipDims kDimsDash = {20.0f, 31.0f}; // Reduced from 35.0f
+static const WarriorClipDims kDimsSlide = {20.0f, 24.0f}; // Reduced from 36.0f
 static const WarriorClipDims kDimsLadder = {20.0f, 40.0f};
 // Wall / ledge helpers
 static const float kWallStickBuffer = 0.10f;
@@ -80,88 +80,85 @@ static Rectangle EnemyAABB(const Enemy *e) {
 	return (Rectangle){e->pos.x, e->pos.y, kEnemyW, kEnemyH};
 }
 
-// Returns new position after moving along one axis while clamping to solids. Sets hit flags on collision.
-static float MoveAxisAgainstTiles(float pos, float other, float halfAlong, float halfOther, float vel, float dt, bool vertical, bool *hitNeg, bool *hitPos) {
-	const float eps = 0.001f;
-	float dist = vel * dt;
-	if (dist == 0.0f) return pos;
-	float rectLeft = vertical ? (other - halfOther) : (pos - halfAlong);
-	float rectTop = vertical ? (pos - halfAlong) : (other - halfOther);
-	float rectW = vertical ? (halfOther * 2.0f) : (halfAlong * 2.0f);
-	float rectH = vertical ? (halfAlong * 2.0f) : (halfOther * 2.0f);
-	bool overlapping = AABBOverlapsSolid(rectLeft + eps, rectTop + eps, rectW - eps * 2.0f, rectH - eps * 2.0f);
-	float startEdge = pos + ((dist > 0.0f) ? halfAlong : -halfAlong);
-	float endEdge = startEdge + dist;
-	int otherMin = vertical ? WorldToCellX((other - halfOther) + eps) : WorldToCellY((other - halfOther) + eps);
-	int otherMax = vertical ? WorldToCellX((other + halfOther) - eps) : WorldToCellY((other + halfOther) - eps);
-	float allowed = dist;
+static void MoveEntity(Vector2 *pos, Vector2 *vel, float w, float h, float dt, bool *hitLeft, bool *hitRight, bool *hitTop, bool *hitBottom) {
+	if (hitLeft) *hitLeft = false;
+	if (hitRight) *hitRight = false;
+	if (hitTop) *hitTop = false;
+	if (hitBottom) *hitBottom = false;
 
-	if (dist > 0.0f) {
-		int first = vertical ? WorldToCellY(startEdge + eps) : WorldToCellX(startEdge + eps);
-		int last = vertical ? WorldToCellY(endEdge + eps) : WorldToCellX(endEdge + eps);
-		for (int axisCell = first; axisCell <= last; ++axisCell) {
-			for (int o = otherMin; o <= otherMax; ++o) {
-				int cx = vertical ? o : axisCell;
-				int cy = vertical ? axisCell : o;
-				if (!BlockAtCell(cx, cy)) continue;
-				float boundary = CellToWorld(axisCell); // top or left boundary
-				float candidate = boundary - startEdge - eps;
-				if (candidate < allowed) {
-					if (candidate < 0.0f && !overlapping) candidate = 0.0f; // avoid pulling back unless resolving existing overlap
-					allowed = candidate;
-					if (hitPos) *hitPos = true;
-				}
+	float halfW = w * 0.5f;
+	float halfH = h * 0.5f;
+
+	// X Axis
+	float dx = vel->x * dt;
+	if (dx != 0.0f) {
+		float nextX = pos->x + dx;
+		float leadingX = (dx > 0) ? (nextX + halfW) : (nextX - halfW);
+		int startCellY = WorldToCellY(pos->y - halfH + 0.01f);
+		int endCellY = WorldToCellY(pos->y + halfH - 0.01f);
+		int cellX = WorldToCellX(leadingX);
+
+		bool collision = false;
+		for (int cy = startCellY; cy <= endCellY; ++cy) {
+			if (BlockAtCell(cellX, cy)) {
+				collision = true;
+				break;
 			}
 		}
-	} else { // dist < 0
-		int first = vertical ? WorldToCellY(startEdge - eps) : WorldToCellX(startEdge - eps);
-		int last = vertical ? WorldToCellY(endEdge - eps) : WorldToCellX(endEdge - eps);
-		for (int axisCell = first; axisCell >= last; --axisCell) {
-			for (int o = otherMin; o <= otherMax; ++o) {
-				int cx = vertical ? o : axisCell;
-				int cy = vertical ? axisCell : o;
-				if (!BlockAtCell(cx, cy)) continue;
-				float boundary = CellToWorld(axisCell + 1); // bottom or right boundary
-				float candidate = boundary - startEdge + eps; // negative
-				if (candidate > allowed) {
-					if (candidate > 0.0f && !overlapping) candidate = 0.0f; // avoid pulling back unless resolving existing overlap
-					allowed = candidate;
-					if (hitNeg) *hitNeg = true;
-				}
+
+		if (collision) {
+			if (dx > 0) {
+				if (hitRight) *hitRight = true;
+				pos->x = CellToWorld(cellX) - halfW - 0.001f;
+				vel->x = 0;
+			} else {
+				if (hitLeft) *hitLeft = true;
+				pos->x = CellToWorld(cellX + 1) + halfW + 0.001f;
+				vel->x = 0;
 			}
+		} else {
+			pos->x = nextX;
 		}
 	}
 
-	pos += allowed;
-	if (allowed != dist) {
-		// Snap flush to the blocker to avoid re-penetration on next frame.
-		if (allowed > dist && hitNeg) *hitNeg = true;
-		if (allowed < dist && hitPos) *hitPos = true;
+	// Y Axis
+	float dy = vel->y * dt;
+	if (dy != 0.0f) {
+		float nextY = pos->y + dy;
+		float leadingY = (dy > 0) ? (nextY + halfH) : (nextY - halfH);
+		int startCellX = WorldToCellX(pos->x - halfW + 0.01f);
+		int endCellX = WorldToCellX(pos->x + halfW - 0.01f);
+		int cellY = WorldToCellY(leadingY);
+
+		bool collision = false;
+		for (int cx = startCellX; cx <= endCellX; ++cx) {
+			if (BlockAtCell(cx, cellY)) {
+				collision = true;
+				break;
+			}
+		}
+
+		if (collision) {
+			if (dy > 0) {
+				if (hitBottom) *hitBottom = true;
+				pos->y = CellToWorld(cellY) - halfH - 0.001f;
+				vel->y = 0;
+			} else {
+				if (hitTop) *hitTop = true;
+				pos->y = CellToWorld(cellY + 1) + halfH + 0.001f;
+				vel->y = 0;
+			}
+		} else {
+			pos->y = nextY;
+		}
 	}
-	return pos;
 }
 
 // Move an AABB against tile solids, clamping to the first obstacle per axis.
 // Returns contact flags for the axis-aligned faces.
 static void MovePlayerWithCollisions(GameState *game, float w, float h, float dt,
                                      bool *hitLeft, bool *hitRight, bool *hitTop, bool *hitBottom) {
-	float halfW = w * 0.5f;
-	float halfH = h * 0.5f;
-	float posX = game->playerPos.x;
-	float posY = game->playerPos.y;
-
-	if (hitLeft) *hitLeft = false;
-	if (hitRight) *hitRight = false;
-	if (hitTop) *hitTop = false;
-	if (hitBottom) *hitBottom = false;
-
-	posX = MoveAxisAgainstTiles(posX, posY, halfW, halfH, game->playerVel.x, dt, false, hitLeft, hitRight);
-	if ((hitLeft && *hitLeft) || (hitRight && *hitRight)) game->playerVel.x = 0.0f;
-	posY = MoveAxisAgainstTiles(posY, posX, halfH, halfW, game->playerVel.y, dt, true, hitTop, hitBottom);
-	if ((hitTop && *hitTop) || (hitBottom && *hitBottom)) game->playerVel.y = 0.0f;
-
-	game->playerPos.x = posX;
-	game->playerPos.y = posY;
+	MoveEntity(&game->playerPos, &game->playerVel, w, h, dt, hitLeft, hitRight, hitTop, hitBottom);
 }
 
 static void Rogue_Clear(void) {
@@ -241,40 +238,7 @@ static void Rogue_ResolveEnemyEnemyCollisions(void) {
 	}
 }
 
-static void ResolveAxis(float *pos, float *vel, float other, float w, float h, bool vertical, float dt, bool xIsCenter, bool yIsCenter) {
-	float remaining = *vel * dt;
-	if (remaining == 0.0f) return;
-	float sign = (remaining > 0) ? 1.0f : -1.0f;
-	while (remaining != 0.0f) {
-		float step = remaining;
-		float maxStep = (float)SQUARE_SIZE - 1.0f;
-		if (step > maxStep) step = maxStep;
-		if (step < -maxStep) step = -maxStep;
-		float newPos = *pos + step;
-		float x = vertical ? other : newPos;
-		if (xIsCenter) x -= w * 0.5f;
-		float y = vertical ? newPos : other;
-		if (yIsCenter) y -= h * 0.5f;
-		if (AABBOverlapsSolid(x, y, w, h)) {
-			int pixels = (int)fabsf(step);
-			for (int i = 0; i < pixels; ++i) {
-				newPos = *pos + sign;
-				x = vertical ? other : newPos;
-				if (xIsCenter) x -= w * 0.5f;
-				y = vertical ? newPos : other;
-				if (yIsCenter) y -= h * 0.5f;
-				if (AABBOverlapsSolid(x, y, w, h)) {
-					*vel = 0.0f;
-					return;
-				}
-				*pos = newPos;
-			}
-		} else {
-			*pos = newPos;
-		}
-		remaining -= step;
-	}
-}
+
 
 // If a collision still leaves the player overlapping a solid block, nudge them back out
 static void PushPlayerOutOfSolids(GameState *game, float *centerX, float *y, float w, float h, bool preferVertical) {
@@ -438,25 +402,20 @@ static void Rogue_UpdateEnemies(GameState *game, float dt) {
 		e->vel.y += GRAVITY * dt;
 		if (e->vel.y > ROGUE_ENEMY_MAX_FALL) e->vel.y = ROGUE_ENEMY_MAX_FALL;
 
-		float newX = e->pos.x;
-		float newY = e->pos.y;
-		ResolveAxis(&newX, &e->vel.x, newY, kEnemyW, kEnemyH, false, dt, false, false);
-		ResolveAxis(&newY, &e->vel.y, newX, kEnemyW, kEnemyH, true, dt, false, false);
+		MoveEntity(&e->pos, &e->vel, kEnemyW, kEnemyH, dt, NULL, NULL, NULL, NULL);
 
-		if (newX < 0.0f) {
-			newX = 0.0f;
+		if (e->pos.x < 0.0f) {
+			e->pos.x = 0.0f;
 			e->vel.x = 0.0f;
 		}
-		if (newX > WINDOW_WIDTH - kEnemyW) {
-			newX = WINDOW_WIDTH - kEnemyW;
+		if (e->pos.x > WINDOW_WIDTH - kEnemyW) {
+			e->pos.x = WINDOW_WIDTH - kEnemyW;
 			e->vel.x = 0.0f;
 		}
-		if (newY > WINDOW_HEIGHT - kEnemyH) {
-			newY = WINDOW_HEIGHT - kEnemyH;
+		if (e->pos.y > WINDOW_HEIGHT - kEnemyH) {
+			e->pos.y = WINDOW_HEIGHT - kEnemyH;
 			e->vel.y = 0.0f;
 		}
-		e->pos.x = newX;
-		e->pos.y = newY;
 
 		if (e->pos.y > WINDOW_HEIGHT + kEnemyH * 2.0f) {
 			e->active = false;
@@ -478,6 +437,25 @@ static void TriggerDeath(GameState *game) {
 	Render_SpawnDeathExplosion(game);
 }
 
+static void TakeDamage(GameState *game, Vector2 sourcePos) {
+	if (game->invincibilityTimer > 0.0f) return;
+	if (game->health <= 0) return;
+
+	game->health--;
+	game->invincibilityTimer = ROGUE_INVINCIBILITY_TIME;
+	game->hurtTimer = ANIM_HURT_DURATION;
+
+	// Knockback
+	float dirX = (game->playerPos.x < sourcePos.x) ? -1.0f : 1.0f;
+	game->playerVel.x = dirX * ROGUE_KNOCKBACK_FORCE_X;
+	game->playerVel.y = ROGUE_KNOCKBACK_FORCE_Y;
+	game->onGround = false;
+
+	if (game->health <= 0) {
+		TriggerDeath(game);
+	}
+}
+
 static void Rogue_HandleEnemyPlayerCollisions(GameState *game) {
 	if (death) return;
 	Rectangle pb = PlayerAABB(game);
@@ -497,7 +475,7 @@ static void Rogue_HandleEnemyPlayerCollisions(GameState *game) {
 			game->jumpBufferTimer = 0.0f;
 			Render_SpawnLandDust(game);
 		} else {
-			TriggerDeath(game);
+			TakeDamage(game, e->pos);
 			return;
 		}
 	}
@@ -546,15 +524,13 @@ void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt)
 		}
 		float aabbW = 0.0f, aabbH = 0.0f;
 		Game_CurrentAABBDims(game, &aabbW, &aabbH);
-		float newX = game->playerPos.x;
-		float newY = game->playerPos.y;
-		ResolveAxis(&newX, &game->playerVel.x, newY, aabbW, aabbH, false, dt, true, true);
-		ResolveAxis(&newY, &game->playerVel.y, newX, aabbW, aabbH, true, dt, true, true);
-		PushPlayerOutOfSolids(game, &newX, &newY, aabbW, aabbH, false);
+		Vector2 pPos = game->playerPos;
+		MoveEntity(&pPos, &game->playerVel, aabbW, aabbH, dt, NULL, NULL, NULL, NULL);
+		PushPlayerOutOfSolids(game, &pPos.x, &pPos.y, aabbW, aabbH, false);
 		float halfW = aabbW * 0.5f;
 		float halfH = aabbH * 0.5f;
-		float aabbLeft = newX - halfW;
-		float belowY = newY + halfH + 1.0f;
+		float aabbLeft = pPos.x - halfW;
+		float belowY = pPos.y + halfH + 1.0f;
 		int leftCell = WorldToCellX(aabbLeft + 1.0f);
 		int rightCell = WorldToCellX(aabbLeft + aabbW - 2.0f);
 		int belowCellY = WorldToCellY(belowY);
@@ -564,25 +540,25 @@ void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt)
 				game->onGround = true;
 				break;
 			}
-		if (newX < halfW) {
-			newX = halfW;
+		if (pPos.x < halfW) {
+			pPos.x = halfW;
 			game->playerVel.x = 0.0f;
 		}
-		if (newX > WINDOW_WIDTH - halfW) {
-			newX = WINDOW_WIDTH - halfW;
+		if (pPos.x > WINDOW_WIDTH - halfW) {
+			pPos.x = WINDOW_WIDTH - halfW;
 			game->playerVel.x = 0.0f;
 		}
-		if (newY < halfH) {
-			newY = halfH;
+		if (pPos.y < halfH) {
+			pPos.y = halfH;
 			game->playerVel.y = 0.0f;
 		}
-		if (newY > WINDOW_HEIGHT - halfH) {
-			newY = WINDOW_HEIGHT - halfH;
+		if (pPos.y > WINDOW_HEIGHT - halfH) {
+			pPos.y = WINDOW_HEIGHT - halfH;
 			game->playerVel.y = 0.0f;
 			game->onGround = true;
 		}
-		game->playerPos.x = newX;
-		game->playerPos.y = newY;
+		game->playerPos.x = pPos.x;
+		game->playerPos.y = pPos.y;
 		return;
 	}
 	if (victory) return;
@@ -591,6 +567,10 @@ void UpdateGame(GameState *game, const struct LevelEditorState *level, float dt)
 	if (game->hurtTimer > 0.0f) {
 		game->hurtTimer -= dt;
 		if (game->hurtTimer < 0.0f) game->hurtTimer = 0.0f;
+	}
+	if (game->invincibilityTimer > 0.0f) {
+		game->invincibilityTimer -= dt;
+		if (game->invincibilityTimer < 0.0f) game->invincibilityTimer = 0.0f;
 	}
 	game->animDash = false;
 	game->animSlide = false;
@@ -916,6 +896,9 @@ void Game_ResetVisuals(GameState *game) {
 	game->wallStickTimer = 0.0f;
 	game->edgeHang = false;
 	game->edgeHangDir = 0;
+	game->health = ROGUE_PLAYER_HEALTH;
+	game->maxHealth = ROGUE_PLAYER_HEALTH;
+	game->invincibilityTimer = 0.0f;
 }
 void Game_CurrentAABBDims(const GameState *g, float *outW, float *outH) {
 	if (!g) {

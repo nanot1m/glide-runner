@@ -34,6 +34,9 @@ typedef struct GameState {
 	bool animLadder; // ladder/wall cling visual
 	float crouchAnimTime; // progress through crouch enter/exit anim
 	int crouchAnimDir; // 1 = crouch down, -1 = stand up, 0 = hold/none
+	int health;
+	int maxHealth;
+	float invincibilityTimer;
 } GameState;
 
 struct LevelEditorState;
