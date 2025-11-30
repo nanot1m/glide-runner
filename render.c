@@ -7,10 +7,23 @@
 static Texture2D gBlockTileset = {0};
 static const int BLOCK_TILE_SIZE = 32;
 static int gBlockTileCols = 0;
+static Texture2D gWarriorSheet = {0};
+#ifndef WARRIOR_FRAME_W
+#define WARRIOR_FRAME_W 69
+#endif
+#ifndef WARRIOR_FRAME_H
+#define WARRIOR_FRAME_H 44
+#endif
+static const int WARRIOR_SHEET_COLS = 6;
+static const int WARRIOR_SHEET_ROWS = 17;
+static const int WARRIOR_TOTAL_FRAMES = WARRIOR_SHEET_COLS * WARRIOR_SHEET_ROWS;
 
 Rectangle PlayerAABB(const GameState *g) {
-	float h = g->crouching ? PLAYER_H_CROUCH : PLAYER_H;
-	return (Rectangle){g->playerPos.x, g->playerPos.y, PLAYER_W, h};
+	float w = 0.0f, h = 0.0f;
+	Game_CurrentAABBDims(g, &w, &h);
+	float left = g->playerPos.x - w * 0.5f;
+	float top = g->playerPos.y - h * 0.5f;
+	return (Rectangle){left, top, w, h};
 }
 
 Rectangle ExitAABB(const GameState *g) {
@@ -62,15 +75,21 @@ void RenderTiles(const LevelEditorState *ed) {
 			} else if (IsHazardTile(t)) {
 				Rectangle lr = LaserStripeRect((Vector2){CellToWorld(x), CellToWorld(y)});
 				DrawRectangleRec(lr, RED);
+			} else if (IsSpawnerTile(t)) {
+				Rectangle r = TileRect(x, y);
+				Color c = (Color){120, 40, 200, 255};
+				DrawRectangleRounded(r, 0.35f, 6, c);
+				DrawRectangleLinesEx(r, 2.0f, (Color){90, 20, 160, 255});
 			}
 		}
 	}
 }
 
 void RenderTilesGameplay(const LevelEditorState *ed, const GameState *g) {
-	int leftCell = WorldToCellX(g->playerPos.x + 1.0f);
-	int rightCell = WorldToCellX(g->playerPos.x + PLAYER_W - 2.0f);
-	int footCellY = WorldToCellY(g->playerPos.y + (g->crouching ? PLAYER_H_CROUCH : PLAYER_H) + 0.5f);
+	Rectangle aabb = PlayerAABB(g);
+	int leftCell = WorldToCellX(aabb.x + 1.0f);
+	int rightCell = WorldToCellX(aabb.x + aabb.width - 2.0f);
+	int footCellY = WorldToCellY(aabb.y + aabb.height + 0.5f);
 	for (int y = 0; y < GRID_ROWS; ++y) {
 		for (int x = 0; x < GRID_COLS; ++x) {
 			TileType t = ed->tiles[y][x];
@@ -84,25 +103,37 @@ void RenderTilesGameplay(const LevelEditorState *ed, const GameState *g) {
 			} else if (IsHazardTile(t)) {
 				Rectangle lr = LaserStripeRect((Vector2){CellToWorld(x), CellToWorld(y)});
 				DrawRectangleRec(lr, RED);
+			} else if (IsSpawnerTile(t)) {
+				Rectangle r = TileRect(x, y);
+				Color c = (Color){120, 40, 200, 255};
+				DrawRectangleRounded(r, 0.35f, 6, c);
+				DrawRectangleLinesEx(r, 2.0f, (Color){90, 20, 160, 255});
 			}
 		}
 	}
 }
 
 void DrawStats(const GameState *g) {
-	DrawText(TextFormat("FPS: %d", GetFPS()), 10, 40, 20, RED);
-	DrawText(TextFormat("Vel: (%.0f, %.0f)", g->playerVel.x, g->playerVel.y), 10, 70, 20, DARKGRAY);
-	DrawText(g->onGround ? "Grounded" : "Air", 10, 100, 20, DARKGRAY);
-	DrawText(TextFormat("Coy: %.2f  Buf: %.2f", g->coyoteTimer, g->jumpBufferTimer), 10, 130, 20, DARKGRAY);
+	float y = 40.0f;
+	const float step = 18.0f;
+	DrawText(TextFormat("FPS: %d", GetFPS()), 10, (int)y, 18, RED);
+	y += step;
+	DrawText(TextFormat("Pos: (%.0f, %.0f)", g->playerPos.x, g->playerPos.y), 10, (int)y, 18, DARKGRAY);
+	y += step;
+	DrawText(TextFormat("Vel: (%.0f, %.0f)", g->playerVel.x, g->playerVel.y), 10, (int)y, 18, DARKGRAY);
+	y += step;
+	DrawText(TextFormat("Ground: %s  WallSlide: %s", g->onGround ? "yes" : "no", g->wallSliding ? "yes" : "no"), 10, (int)y, 18, DARKGRAY);
+	y += step;
+	DrawText(TextFormat("Wall L/R: %d / %d  Stick: %.2f", g->wallContactLeft, g->wallContactRight, g->wallStickTimer), 10, (int)y, 18, DARKGRAY);
+	y += step;
+	DrawText(TextFormat("Crouch: %s  Facing: %s", g->crouching ? "yes" : "no", g->facingRight ? "R" : "L"), 10, (int)y, 18, DARKGRAY);
+	y += step;
+	DrawText(TextFormat("Coyote: %.2f  WallCoy: %.2f", g->coyoteTimer, g->wallCoyoteTimer), 10, (int)y, 18, DARKGRAY);
+	y += step;
+	DrawText(TextFormat("JumpBuf: %.2f  Dash:%d Slide:%d Ladder:%d", g->jumpBufferTimer, g->animDash, g->animSlide, g->animLadder), 10, (int)y, 18, DARKGRAY);
 }
 
 // --- Player sprite rendering ---
-
-static Texture2D gIdleTex = {0};
-static Texture2D gRunTex = {0};
-// Pre-flipped left-facing sheets to avoid per-draw flipping artifacts
-static Texture2D gIdleTexL = {0};
-static Texture2D gRunTexL = {0};
 
 static float gRunDustTimer = 0.0f;
 
@@ -232,40 +263,212 @@ void Render_DrawDust(float dt) {
 	Dust_Draw();
 }
 
+typedef struct {
+	int startFrame;
+	int frameCount;
+	float fps;
+	bool loop;
+} WarriorAnim;
+
+enum {
+	WA_IDLE,
+	WA_RUN,
+	WA_ATTACK,
+	WA_DEATH,
+	WA_HURT,
+	WA_JUMP,
+	WA_UP_TO_FALL,
+	WA_FALL,
+	WA_EDGE_GRAB,
+	WA_EDGE_IDLE,
+	WA_WALL,
+	WA_CROUCH_DOWN,
+	WA_CROUCH_UP,
+	WA_DASH,
+	WA_DASH_ATTACK,
+	WA_SLIDE,
+	WA_SLIDE_EXIT,
+	WA_LADDER,
+};
+
+static WarriorAnim gWarriorAnims[] = {
+    [WA_IDLE] = {.startFrame = 0, .frameCount = 6, .fps = 8.0f, .loop = true},
+    [WA_RUN] = {.startFrame = 6, .frameCount = 8, .fps = 14.0f, .loop = true},
+    [WA_ATTACK] = {.startFrame = 14, .frameCount = 12, .fps = 14.0f, .loop = false},
+    [WA_DEATH] = {.startFrame = 26, .frameCount = 11, .fps = 10.0f, .loop = false},
+    [WA_HURT] = {.startFrame = 37, .frameCount = 4, .fps = 12.0f, .loop = false},
+    [WA_JUMP] = {.startFrame = 41, .frameCount = 3, .fps = 12.0f, .loop = false},
+    [WA_UP_TO_FALL] = {.startFrame = 44, .frameCount = 2, .fps = 10.0f, .loop = false},
+    [WA_FALL] = {.startFrame = 46, .frameCount = 3, .fps = 10.0f, .loop = true},
+    [WA_EDGE_GRAB] = {.startFrame = 49, .frameCount = 5, .fps = 10.0f, .loop = false},
+    [WA_EDGE_IDLE] = {.startFrame = 54, .frameCount = 6, .fps = 8.0f, .loop = true},
+    [WA_WALL] = {.startFrame = 60, .frameCount = 3, .fps = 8.0f, .loop = true},
+    [WA_CROUCH_DOWN] = {.startFrame = 63, .frameCount = 3, .fps = 10.0f, .loop = false},
+    [WA_CROUCH_UP] = {.startFrame = 66, .frameCount = 3, .fps = 10.0f, .loop = false},
+    [WA_DASH] = {.startFrame = 69, .frameCount = 7, .fps = 14.0f, .loop = true},
+    [WA_DASH_ATTACK] = {.startFrame = 76, .frameCount = 10, .fps = 14.0f, .loop = true},
+    [WA_SLIDE] = {.startFrame = 86, .frameCount = 3, .fps = 12.0f, .loop = false}, // enter slide
+    [WA_SLIDE_EXIT] = {.startFrame = 89, .frameCount = 2, .fps = 12.0f, .loop = false}, // exit slide
+    [WA_LADDER] = {.startFrame = 91, .frameCount = 8, .fps = 10.0f, .loop = true},
+};
+
+static Rectangle WarriorFrameRect(int frameIndex) {
+	int col = frameIndex % WARRIOR_SHEET_COLS;
+	int row = frameIndex / WARRIOR_SHEET_COLS;
+	return (Rectangle){(float)(col * WARRIOR_FRAME_W), (float)(row * WARRIOR_FRAME_H), (float)WARRIOR_FRAME_W, (float)WARRIOR_FRAME_H};
+}
+
+static void RenderPlayerWarrior(const GameState *g) {
+	if (g->hidden || gWarriorSheet.id == 0) return;
+	static int sLastAnim = -1;
+	static float sAnimTime = 0.0f;
+	static float sLastRunTime = -1.0f;
+	static bool sPrevSlide = false;
+	static float sSlideExitTimer = 0.0f;
+
+	float dt = GetFrameTime();
+	if (dt > 0.033f) dt = 0.033f;
+	if (sLastRunTime < 0.0f || g->runTime < sLastRunTime) {
+		sLastAnim = -1;
+		sAnimTime = 0.0f;
+		sPrevSlide = false;
+		sSlideExitTimer = 0.0f;
+	}
+	sLastRunTime = g->runTime;
+
+	float speed = fabsf(g->playerVel.x);
+	float maxSpeedXNow = g->crouching ? MAX_SPEED_X_CROUCH : MAX_SPEED_X;
+	bool wallBlocked = g->onGround && (g->wallContactLeft || g->wallContactRight);
+	bool running = g->onGround && !wallBlocked && speed > (0.1f * maxSpeedXNow);
+	bool rising = (!g->onGround) && g->playerVel.y < -40.0f;
+	bool falling = (!g->onGround) && g->playerVel.y > 60.0f;
+	bool atPeak = (!g->onGround) && !rising && !falling;
+	bool edgeHang = g->edgeHang;
+	bool wallStick = (!g->onGround) && !edgeHang && (g->wallSliding || g->wallContactLeft || g->wallContactRight || g->wallStickTimer > 0.0f);
+	bool dying = Game_IsDying();
+	bool hurt = g->hurtTimer > 0.0f;
+	float overrideT = -1.0f;
+	float slideExitDuration = (float)gWarriorAnims[WA_SLIDE_EXIT].frameCount / gWarriorAnims[WA_SLIDE_EXIT].fps;
+	float edgeGrabDuration = (float)gWarriorAnims[WA_EDGE_GRAB].frameCount / gWarriorAnims[WA_EDGE_GRAB].fps;
+
+	bool sliding = g->animSlide;
+	if (sliding) {
+		sSlideExitTimer = 0.0f; // cancel exit if re-entering slide
+	} else if (sPrevSlide && slideExitDuration > 0.0f) {
+		sSlideExitTimer = slideExitDuration;
+	}
+	sPrevSlide = sliding;
+	if (sSlideExitTimer > 0.0f) {
+		sSlideExitTimer -= dt;
+		if (sSlideExitTimer < 0.0f) sSlideExitTimer = 0.0f;
+	}
+	bool playingSlideExit = sSlideExitTimer > 0.0f;
+	bool enteringEdgeHang = edgeHang && sLastAnim != WA_EDGE_GRAB && sLastAnim != WA_EDGE_IDLE;
+	bool continuingEdgeGrab = (sLastAnim == WA_EDGE_GRAB) && (sAnimTime < edgeGrabDuration);
+
+	int anim = WA_IDLE;
+	if (dying) {
+		anim = WA_DEATH;
+	} else if (hurt) {
+		anim = WA_HURT;
+	} else if (edgeHang) {
+		anim = (enteringEdgeHang || continuingEdgeGrab) ? WA_EDGE_GRAB : WA_EDGE_IDLE;
+	} else if (g->animLadder) {
+		anim = WA_LADDER;
+	} else if (wallStick) {
+		anim = WA_WALL;
+		overrideT = 0.0f; // lock to first frame to avoid jittery looping
+	} else if (sliding) {
+		anim = WA_SLIDE;
+	} else if (playingSlideExit) {
+		anim = WA_SLIDE_EXIT;
+		overrideT = slideExitDuration - sSlideExitTimer;
+	} else if (g->animDash) {
+		anim = WA_DASH;
+	} else if (!g->onGround) {
+		if (rising) {
+			anim = WA_JUMP;
+		} else if (atPeak) {
+			anim = WA_UP_TO_FALL;
+		} else {
+			anim = WA_FALL;
+		}
+	} else if (g->crouchAnimDir == 1) {
+		anim = WA_CROUCH_DOWN;
+		overrideT = g->crouchAnimTime;
+	} else if (g->crouchAnimDir == -1) {
+		anim = WA_CROUCH_UP;
+		overrideT = g->crouchAnimTime;
+	} else if (g->crouching) {
+		anim = WA_CROUCH_DOWN;
+		// Hold final crouch frame
+		WarriorAnim hold = gWarriorAnims[WA_CROUCH_DOWN];
+		overrideT = (hold.frameCount - 1) / hold.fps;
+	} else if (running) {
+		anim = WA_RUN;
+	}
+
+	if (anim != sLastAnim) {
+		sAnimTime = 0.0f;
+		sLastAnim = anim;
+	} else {
+		sAnimTime += dt;
+	}
+
+	WarriorAnim def = gWarriorAnims[anim];
+	float t = (overrideT >= 0.0f) ? overrideT : sAnimTime;
+	int frame = (int)floorf(t * def.fps);
+	if (!def.loop) {
+		if (frame >= def.frameCount) frame = def.frameCount - 1;
+	} else {
+		frame = frame % def.frameCount;
+	}
+	int spriteFrame = def.startFrame + frame;
+	if (spriteFrame >= WARRIOR_TOTAL_FRAMES) spriteFrame = WARRIOR_TOTAL_FRAMES - 1;
+	Rectangle src = WarriorFrameRect(spriteFrame);
+
+	float scaleX = WARRIOR_SCALE;
+	float scaleY = WARRIOR_SCALE;
+	float pivotSrcX = (float)WARRIOR_FRAME_W * 0.38f;
+	float pivotSrcY = (float)WARRIOR_FRAME_H * 0.5f;
+	float pivotWorldX = pivotSrcX * scaleX;
+	float pivotWorldY = pivotSrcY * scaleY;
+
+	Vector2 origin = (Vector2){pivotWorldX, pivotWorldY};
+
+	float dstW = (float)WARRIOR_FRAME_W * scaleX;
+	float dstH = (float)WARRIOR_FRAME_H * scaleY;
+
+	if (!g->facingRight) {
+		src.width = -src.width;
+		src.x -= pivotSrcX * 0.5f;
+	}
+	Rectangle aabb = PlayerAABB(g);
+
+	float dstX = g->playerPos.x - dstW * 0.5f + pivotWorldX * 1.2f;
+	// float dstY = g->playerPos.y - dstH * 0.5f + pivotWorldY; // + g->groundSink;
+	float dstY = aabb.y + aabb.height - dstH / 2; // align to feet
+
+	Rectangle dst = (Rectangle){dstX, dstY, dstW, dstH};
+
+	DrawTexturePro(gWarriorSheet, src, dst, origin, g->spriteRotation, WHITE);
+#if DEBUG_DRAW_BOUNDS
+	DrawRectangleLinesEx(aabb, 1.0f, RED);
+	DrawCircleV(g->playerPos, 2.0f, YELLOW);
+#endif
+}
+
 bool Render_Init(void) {
-	if (gIdleTex.id == 0) {
-		gIdleTex = LoadTexture("assets/GlideManIdle.png");
-		SetTextureFilter(gIdleTex, TEXTURE_FILTER_POINT);
-	}
-	if (gRunTex.id == 0) {
-		gRunTex = LoadTexture("assets/GlideManRun.png");
-		SetTextureFilter(gRunTex, TEXTURE_FILTER_POINT);
-	}
-	// Create left-facing variants by flipping images once at init
-	if (gIdleTexL.id == 0) {
-		Image img = LoadImage("assets/GlideManIdle.png");
-		if (img.data != NULL) {
-			ImageFlipHorizontal(&img);
-			gIdleTexL = LoadTextureFromImage(img);
-			UnloadImage(img);
-			if (gIdleTexL.id != 0) SetTextureFilter(gIdleTexL, TEXTURE_FILTER_POINT);
-		}
-	}
-	if (gRunTexL.id == 0) {
-		Image img = LoadImage("assets/GlideManRun.png");
-		if (img.data != NULL) {
-			ImageFlipHorizontal(&img);
-			gRunTexL = LoadTextureFromImage(img);
-			UnloadImage(img);
-			if (gRunTexL.id != 0) SetTextureFilter(gRunTexL, TEXTURE_FILTER_POINT);
-		}
-	}
 	if (gBlockTileset.id == 0) {
 		gBlockTileset = LoadTexture("assets/tilesetgrass.png");
 		if (gBlockTileset.id != 0) {
 			SetTextureFilter(gBlockTileset, TEXTURE_FILTER_POINT);
 			gBlockTileCols = gBlockTileset.width / BLOCK_TILE_SIZE;
 		}
+	}
+	if (gWarriorSheet.id == 0) {
+		gWarriorSheet = LoadTexture("assets/warrior_sheet.png");
+		if (gWarriorSheet.id != 0) SetTextureFilter(gWarriorSheet, TEXTURE_FILTER_POINT);
 	}
 	// Initialize autotiler with tilemap layout
 	TilemapLayout layout = {
@@ -330,31 +533,19 @@ bool Render_Init(void) {
 	bool autotilerReady = Autotiler_Init(&autotilerConfig);
 	Dust_Reset();
 	// Return success if at least one of the core sprites loaded; fallback drawing still works
-	bool spritesReady = (gIdleTex.id != 0) && (gRunTex.id != 0) && (gIdleTexL.id != 0) && (gRunTexL.id != 0);
+	bool spritesReady = (gWarriorSheet.id != 0);
 	return spritesReady && autotilerReady;
 }
 
 void Render_Deinit(void) {
-	if (gIdleTex.id != 0) {
-		UnloadTexture(gIdleTex);
-		gIdleTex.id = 0;
-	}
-	if (gRunTex.id != 0) {
-		UnloadTexture(gRunTex);
-		gRunTex.id = 0;
-	}
-	if (gIdleTexL.id != 0) {
-		UnloadTexture(gIdleTexL);
-		gIdleTexL.id = 0;
-	}
-	if (gRunTexL.id != 0) {
-		UnloadTexture(gRunTexL);
-		gRunTexL.id = 0;
-	}
 	if (gBlockTileset.id != 0) {
 		UnloadTexture(gBlockTileset);
 		gBlockTileset.id = 0;
 		gBlockTileCols = 0;
+	}
+	if (gWarriorSheet.id != 0) {
+		UnloadTexture(gWarriorSheet);
+		gWarriorSheet.id = 0;
 	}
 	gRunDustTimer = 0.0f;
 	Dust_Reset();
@@ -364,67 +555,5 @@ void RenderPlayer(const GameState *g) {
 	// Choose animation based on simple state: running vs idle
 	if (g->hidden) return;
 
-	const float speed = (float)fabsf(g->playerVel.x);
-	const float maxSpeedXNow = g->crouching ? MAX_SPEED_X_CROUCH : MAX_SPEED_X;
-	const bool movingFast = speed > (0.5f * maxSpeedXNow);
-	const bool running = g->onGround && movingFast;
-	bool faceRight = g->facingRight;
-	const Texture2D tex = running
-	                          ? (faceRight ? gRunTex : gRunTexL)
-	                          : (faceRight ? gIdleTex : gIdleTexL);
-	// Destination rectangle: width = SQUARE_SIZE; height reflects crouch (half height)
-	Rectangle aabb = PlayerAABB(g);
-	float dstW = (float)SQUARE_SIZE * (g->spriteScaleX <= 0.0f ? 1.0f : g->spriteScaleX);
-	// Scale height based on physics AABB vs standing height so crouch is half
-	float heightScale = (float)(aabb.height / (float)PLAYER_H); // 1.0 standing, 0.5 crouched
-	float squashY = g->spriteScaleY;
-	if (squashY < 0.2f) squashY = 0.2f; // avoid collapsing
-	float dstH = (float)SQUARE_SIZE * heightScale * squashY;
-	float dstX = aabb.x + (aabb.width - dstW) * 0.5f; // center horizontally over physics
-	float dstY = (aabb.y + aabb.height) - dstH; // keep feet anchored
-	dstY += g->groundSink;
-	Rectangle dst = (Rectangle){dstX, dstY, dstW, dstH};
-
-	if (tex.id == 0) {
-		// Fallback: draw a square at the sprite destination size
-		DrawRectangleRec(dst, BLUE);
-		return;
-	}
-
-	// Each sheet: 5 columns, 1 row, each 16x16
-	const int cols = 5;
-	const int fw = 16, fh = 16;
-	const float fps = 10.0f; // animation speed
-	int frame = (int)(g->runTime * fps) % cols;
-
-	// Source rect, handle horizontal flip using negative width
-	// For left-facing, offset x slightly from the exact frame boundary to avoid border sampling
-	// Source rect: always positive width; left/right is baked into chosen texture
-	Rectangle src = (Rectangle){(float)(frame * fw), 0.0f, (float)fw, (float)fh};
-
-	float dt = GetFrameTime();
-	if (dt > 0.033f) dt = 0.033f; // clamp for stability
-	if (!running) gRunDustTimer = 0.0f;
-
-	// Subtle running dust at any grounded speed
-	gRunDustTimer += dt;
-	if (running && gRunDustTimer >= 0.05f) {
-		Rectangle baseAabb = PlayerAABB(g);
-		float dir = g->playerVel.x >= 0.0f ? 1.0f : -1.0f;
-		float x = (dir > 0.0f) ? (baseAabb.x + baseAabb.width + 2.0f) : (baseAabb.x - 2.0f);
-		float y = baseAabb.y + baseAabb.height - 3.0f;
-		float speedFrac = speed / maxSpeedXNow;
-		if (speedFrac < 0.25f) speedFrac = 0.25f;
-		if (speedFrac > 1.0f) speedFrac = 1.0f;
-		for (int i = 0; i < 4; ++i) {
-			Vector2 pos = (Vector2){x + RandRange(-2.0f, 2.0f), y + RandRange(-2.0f, 2.0f)};
-			float mag = RandRange(50.0f, 110.0f) * speedFrac;
-			Vector2 vel = (Vector2){-dir * mag, RandRange(-20.0f, 10.0f) * speedFrac};
-			float r = RandRange(3.0f, 5.5f);
-			Dust_SpawnOne(pos, vel, r, RandRange(0.24f, 0.36f));
-		}
-		gRunDustTimer = 0.0f;
-	}
-
-	DrawTexturePro(tex, src, dst, (Vector2){0, 0}, g->spriteRotation, WHITE);
+	RenderPlayerWarrior(g);
 }

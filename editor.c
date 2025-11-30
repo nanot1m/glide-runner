@@ -15,6 +15,7 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game) {
 	if (IsKeyPressed(KEY_THREE)) editor.tool = TOOL_REMOVE_BLOCK;
 	if (IsKeyPressed(KEY_FOUR)) editor.tool = TOOL_EXIT;
 	if (IsKeyPressed(KEY_FIVE)) editor.tool = TOOL_LASER_TRAP;
+	if (IsKeyPressed(KEY_SIX)) editor.tool = TOOL_SPAWNER;
 
 	double now = GetTime();
 	bool moved = false;
@@ -51,7 +52,9 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game) {
 		if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
 			int cx = WorldToCellX(editor.cursor.x), cy = WorldToCellY(editor.cursor.y);
 			SetUniqueTile(&editor, cx, cy, TILE_PLAYER);
-			game->playerPos = (Vector2){CellToWorld(cx), CellToWorld(cy)};
+			float px = CellToWorld(cx) + (float)SQUARE_SIZE * 0.5f;
+			float py = CellToWorld(cy) + (float)SQUARE_SIZE * 0.5f;
+			game->playerPos = (Vector2){px, py};
 		}
 		break;
 	case TOOL_ADD_BLOCK:
@@ -65,7 +68,7 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game) {
 		if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
 			int cx = WorldToCellX(editor.cursor.x), cy = WorldToCellY(editor.cursor.y);
 			TileType t = GetTile(&editor, cx, cy);
-			if (t == TILE_BLOCK || t == TILE_LASER) SetTile(&editor, cx, cy, TILE_EMPTY);
+			if (t == TILE_BLOCK || t == TILE_LASER || t == TILE_SPAWNER) SetTile(&editor, cx, cy, TILE_EMPTY);
 		}
 		break;
 	case TOOL_EXIT:
@@ -79,6 +82,12 @@ void UpdateLevelEditor(ScreenState *screen, GameState *game) {
 		if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
 			int cx = WorldToCellX(editor.cursor.x), cy = WorldToCellY(editor.cursor.y);
 			if (GetTile(&editor, cx, cy) == TILE_EMPTY) SetTile(&editor, cx, cy, TILE_LASER);
+		}
+		break;
+	case TOOL_SPAWNER:
+		if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+			int cx = WorldToCellX(editor.cursor.x), cy = WorldToCellY(editor.cursor.y);
+			if (GetTile(&editor, cx, cy) == TILE_EMPTY) SetTile(&editor, cx, cy, TILE_SPAWNER);
 		}
 		break;
 	default:
@@ -105,8 +114,8 @@ void RenderLevelEditor(const GameState *game) {
 	RenderPlayer(game);
 	DrawRectangleRec((Rectangle){game->exitPos.x, game->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE}, GREEN);
 	DrawText("LEVEL EDITOR", 20, 20, 32, DARKGRAY);
-	const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit", "Laser Trap"};
+	const char *toolNames[TOOL_COUNT] = {"Player Location", "Add Block", "Remove Block", "Level Exit", "Laser Trap", "Enemy Spawner"};
 	DrawText(TextFormat("Tool: %s (Tab to switch)", toolNames[editor.tool]), 20, 60, 18, BLUE);
-	DrawText("Arrows/Mouse: Move cursor | Space/Left Click: Use tool | 1-5: Tools (5=Laser) | ESC: Menu", 20, 85, 18, DARKGRAY);
+	DrawText("Arrows/Mouse: Move cursor | Space/Left Click: Use tool | 1-6: Tools (5=Laser, 6=Spawner) | ESC: Menu", 20, 85, 18, DARKGRAY);
 	DrawRectangleLines((int)editor.cursor.x, (int)editor.cursor.y, SQUARE_SIZE, SQUARE_SIZE, RED);
 }

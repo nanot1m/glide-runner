@@ -16,7 +16,6 @@
 #include "ui.h"
 
 static const UiListSpec LIST_SPEC = {.startY = 70.0f, .stepY = 30.0f, .itemHeight = 24.0f, .fontSize = 24};
-
 static LevelCatalog gCatalog;
 static int gCatalogIndex = 0;
 
@@ -31,22 +30,30 @@ static void RenderLevelList(const char *title) {
 	UiListRenderCB(&LIST_SPEC, gCatalogIndex, gCatalog.count, CatalogLabelAtCB, &gCatalog, title, "No levels found in ./levels", "UP/DOWN/W/S to select, ENTER/CLICK to confirm, ESC to back");
 }
 
+
 static inline void RestorePlayerPosFromTile(const LevelEditorState *ed, GameState *game) {
 	Vector2 p = game->playerPos;
 	FindTileWorldPos(ed, TILE_PLAYER, &p);
-	game->playerPos = p;
+	game->playerPos = (Vector2){p.x + (float)SQUARE_SIZE * 0.5f, p.y + (float)SQUARE_SIZE * 0.5f};
 }
 
 static void ResetPlayerDefaults(GameState *game) {
 	game->facingRight = true;
-	game->playerPos = (Vector2){SQUARE_SIZE, WINDOW_HEIGHT - SQUARE_SIZE * 2};
+	game->playerPos = (Vector2){SQUARE_SIZE + (float)SQUARE_SIZE * 0.5f, WINDOW_HEIGHT - SQUARE_SIZE * 2 + (float)SQUARE_SIZE * 0.5f};
 	game->playerVel = (Vector2){0, 0};
 	game->exitPos = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
-	game->spriteScaleY = 1.0f;
-	game->spriteScaleX = 1.0f;
 	game->spriteRotation = 0.0f;
 	game->hidden = false;
 	game->groundSink = 0.0f;
+	game->hurtTimer = 0.0f;
+	game->animDash = false;
+	game->animSlide = false;
+	game->animLadder = false;
+	game->wallContactLeft = false;
+	game->wallContactRight = false;
+	game->wallStickTimer = 0.0f;
+	game->edgeHang = false;
+	game->edgeHangDir = 0;
 }
 
 static bool EnsureEditorLevel(GameState *game, bool *editorLoaded) {
@@ -80,6 +87,7 @@ static bool EnsureGameLevel(GameState *game, bool *gameLevelLoaded) {
 	game->score = 0;
 	Game_ResetVisuals(game);
 	Game_ClearOutcome();
+	Game_OnLevelLoaded(game, &editor);
 	return true;
 }
 
@@ -159,6 +167,7 @@ static void UpdateScreen(ScreenState *screen, GameState *game, float dt, bool *e
 			InputGate_RequestBlockOnce();
 			RestorePlayerPosFromTile(&editor, game);
 			*screen = SCREEN_LEVEL_EDITOR;
+			*gameLevelLoaded = false;
 			Game_ClearOutcome();
 			break;
 		}
@@ -166,6 +175,7 @@ static void UpdateScreen(ScreenState *screen, GameState *game, float dt, bool *e
 		if (Game_Death()) {
 			RestorePlayerPosFromTile(&editor, game);
 			*screen = SCREEN_LEVEL_EDITOR;
+			*gameLevelLoaded = false;
 			Game_ClearOutcome();
 			break;
 		}

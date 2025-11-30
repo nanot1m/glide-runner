@@ -23,7 +23,8 @@ typedef enum {
 	TILE_BLOCK = 1,
 	TILE_LASER = 2,
 	TILE_PLAYER = 3,
-	TILE_EXIT = 4
+	TILE_EXIT = 4,
+	TILE_SPAWNER = 5
 } TileType;
 
 typedef enum {
@@ -32,6 +33,7 @@ typedef enum {
 	TOOL_REMOVE_BLOCK,
 	TOOL_EXIT,
 	TOOL_LASER_TRAP,
+	TOOL_SPAWNER,
 	TOOL_COUNT
 } EditorTool;
 
@@ -54,6 +56,7 @@ static inline int WorldToCellY(float y) { return (int)floorf(y / (float)SQUARE_S
 static inline float CellToWorld(int c) { return (float)(c * SQUARE_SIZE); }
 static inline bool IsSolidTile(TileType t) { return t == TILE_BLOCK; }
 static inline bool IsHazardTile(TileType t) { return t == TILE_LASER; }
+static inline bool IsSpawnerTile(TileType t) { return t == TILE_SPAWNER; }
 
 // Solid collision box for a tile at cell coordinates, in world space.
 // Visuals remain SQUARE_SIZE; this function defines physics bounds per tile type.
