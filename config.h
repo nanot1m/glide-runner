@@ -27,11 +27,11 @@
 // Physics tuning
 #define GRAVITY 1800.0f
 #define GRAVITY_FALL_MULT 1.5f // Higher gravity when falling for snappier feel
-#define MOVE_ACCEL 1800.0f // Increased for more responsive ground movement
-#define AIR_ACCEL 1100.0f // Increased for better air control
+#define MOVE_ACCEL 1200.0f // Reduced to slow ground acceleration
+#define AIR_ACCEL 750.0f // Reduced for gentler air control
 #define GROUND_FRICTION 0.88f
 #define AIR_FRICTION 0.985f
-#define MAX_SPEED_X 640.0f
+#define MAX_SPEED_X 320.0f
 #define MAX_SPEED_Y 1400.0f
 #define JUMP_SPEED -760.0f // ~1.5x higher jump (via sqrt scaling)
 #define JUMP_CUT_MULT 0.5f // on jump release, damp upward velocity by this factor
@@ -40,16 +40,9 @@
 
 #define GROUND_STICK_TIME 0.030f
 
-// Player hitbox
-#define PLAYER_W ((float)SQUARE_SIZE * 0.8f)
-#define PLAYER_H ((float)SQUARE_SIZE * 0.9f)
-#define PLAYER_H_CROUCH (PLAYER_H * 0.5f)
-#define MAX_SPEED_X_CROUCH 640.0f
+// Player hitbox / movement
+#define MAX_SPEED_X_CROUCH 320.0f
 #define CROUCH_FRICTION 0.97f
-// Squash & stretch tuning
-#define PLAYER_JUMP_STRETCH 1.92f
-#define PLAYER_LAND_SQUASH 0.58f
-#define PLAYER_SQUASH_RECOVER 10.0f
 
 // Dust particle tuning
 #define DUST_MAX 96
@@ -58,7 +51,33 @@
 
 // Wall interaction
 #define WALL_JUMP_PUSH_X 320.0f // Slightly increased for better wall jump distance
-#define WALL_SLIDE_MAX_FALL 220.0f // Reduced for more controlled wall slide
-#define WALL_SLIDE_ACCEL 300.0f // Gradual deceleration when wall sliding
+#define WALL_SLIDE_MAX_FALL 400.0f // Target max fall speed while wall sliding
+#define WALL_SLIDE_ACCEL 2000.0f // Faster decel to clamp toward the target
 // Allow a brief grace period to wall-jump after leaving a wall
 #define WALL_COYOTE_TIME 0.12f
+
+// Roguelike mode tuning
+#define ROGUE_SPAWN_INTERVAL_MS 1500 // interval per spawner
+#define ROGUE_ENEMY_SPEED 220.0f
+#define ROGUE_ENEMY_MAX_FALL 900.0f
+#define ROGUE_ENEMY_W ((float)SQUARE_SIZE * 0.75f)
+#define ROGUE_ENEMY_H ((float)SQUARE_SIZE * 0.75f)
+#define ROGUE_STOMP_BOUNCE_SPEED -520.0f
+#define ROGUE_STOMP_GRACE 10.0f
+#define ROGUE_PLAYER_HEALTH 3
+#define ROGUE_INVINCIBILITY_TIME 1.5f
+#define ROGUE_KNOCKBACK_FORCE_X 400.0f
+#define ROGUE_KNOCKBACK_FORCE_Y -300.0f
+
+// Warrior anim tuning
+#define ANIM_DASH_SPEED_FRAC 1.2f // fraction of MAX_SPEED_X to consider dash (keep run anim at normal cap)
+#define ANIM_SLIDE_SPEED 80.0f // crouch + above this speed => slide anim
+#define ANIM_HURT_LAND_SPEED 950.0f // landing impact to trigger hurt anim
+#define ANIM_HURT_DURATION 0.35f
+#define ANIM_LADDER_SLIDE_SPEED 40.0f // wall slide speed threshold to use ladder idle
+#define WARRIOR_SCALE (SQUARE_SIZE * 1.4f / (float)WARRIOR_FRAME_H) // visual scale multiplier for warrior sprite
+#define WARRIOR_FRAME_W 69
+#define WARRIOR_FRAME_H 44
+
+// Debug
+#define DEBUG_DRAW_BOUNDS 0

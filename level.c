@@ -20,7 +20,7 @@ char gLevelBinPath[260] = LEVEL_FILE_BIN;
 bool gCreateNewRequested = false;
 
 // Format metadata
-static const uint8_t kLevelFormatVersion = 2; // storing player/exit in tile coordinates
+static const uint8_t kLevelFormatVersion = 3; // storing player/exit in tile coordinates + spawners
 static const float kLegacyV1SquareSize = 32.0f; // px size used when v1 saved world positions
 
 Vector2 SnapToGrid(Vector2 p) {
@@ -88,9 +88,8 @@ void CreateDefaultLevel(GameState *game, LevelEditorState *ed) {
 	Vector2 e = (Vector2){WINDOW_WIDTH - SQUARE_SIZE * 2, WINDOW_HEIGHT - SQUARE_SIZE * 2};
 	SetUniqueTile(ed, WorldToCellX(p.x), WorldToCellY(p.y), TILE_PLAYER);
 	SetUniqueTile(ed, WorldToCellX(e.x), WorldToCellY(e.y), TILE_EXIT);
-	game->playerPos = p;
+	game->playerPos = (Vector2){p.x + (float)SQUARE_SIZE * 0.5f, p.y + (float)SQUARE_SIZE * 0.5f};
 	game->exitPos = e;
-	game->spriteScaleY = 1.0f;
 	game->groundStickTimer = 0.0f;
 }
 
@@ -120,8 +119,9 @@ bool SaveLevelBinary(const GameState *game, const LevelEditorState *ed) {
 	Vector2 p = game->playerPos, e = game->exitPos;
 	FindTileWorldPos(ed, TILE_PLAYER, &p);
 	FindTileWorldPos(ed, TILE_EXIT, &e);
-	uint16_t pcx = (uint16_t)WorldToCellX(p.x);
-	uint16_t pcy = (uint16_t)WorldToCellY(p.y);
+	Vector2 pTopLeft = (Vector2){p.x - (float)SQUARE_SIZE * 0.5f, p.y - (float)SQUARE_SIZE * 0.5f};
+	uint16_t pcx = (uint16_t)WorldToCellX(pTopLeft.x);
+	uint16_t pcy = (uint16_t)WorldToCellY(pTopLeft.y);
 	uint16_t ecx = (uint16_t)WorldToCellX(e.x);
 	uint16_t ecy = (uint16_t)WorldToCellY(e.y);
 	if (fwrite(&pcx, sizeof(pcx), 1, f) != 1) {
@@ -177,7 +177,7 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 		fclose(f);
 		return false;
 	}
-	if (version != 1 && version != 2) {
+	if (version != 1 && version != 2 && version != 3) {
 		fclose(f);
 		return false;
 	}
@@ -265,9 +265,8 @@ bool LoadLevelBinary(GameState *game, LevelEditorState *ed) {
 			ed->tiles[y][x] = (TileType)t;
 		}
 	fclose(f);
-	game->playerPos = (Vector2){(float)px, (float)py};
+	game->playerPos = (Vector2){(float)px + (float)SQUARE_SIZE * 0.5f, (float)py + (float)SQUARE_SIZE * 0.5f};
 	game->exitPos = (Vector2){(float)ex, (float)ey};
-	game->spriteScaleY = 1.0f;
 	return true;
 }
 
