@@ -18,13 +18,7 @@ static const int WARRIOR_SHEET_COLS = 6;
 static const int WARRIOR_SHEET_ROWS = 17;
 static const int WARRIOR_TOTAL_FRAMES = WARRIOR_SHEET_COLS * WARRIOR_SHEET_ROWS;
 
-Rectangle PlayerAABB(const GameState *g) {
-	float w = 0.0f, h = 0.0f;
-	Game_CurrentAABBDims(g, &w, &h);
-	float left = g->playerPos.x - w * 0.5f;
-	float top = g->playerPos.y - h * 0.5f;
-	return (Rectangle){left, top, w, h};
-}
+
 
 Rectangle ExitAABB(const GameState *g) {
 	return (Rectangle){g->exitPos.x, g->exitPos.y, (float)SQUARE_SIZE, (float)SQUARE_SIZE};
