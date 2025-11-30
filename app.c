@@ -25,6 +25,8 @@ static const char *CatalogLabelAtCB(int i, void *ud) {
 	return c->items[i].baseName;
 }
 
+static const Color BG_CLOUD = {196, 225, 255, 255};
+
 static void RenderLevelList(const char *title) {
 	UiListRenderCB(&LIST_SPEC, gCatalogIndex, gCatalog.count, CatalogLabelAtCB, &gCatalog, title, "No levels found in ./levels", "UP/DOWN/W/S to select, ENTER/CLICK to confirm, ESC to back");
 }
@@ -301,7 +303,7 @@ int main(void) {
 		}
 
 		BeginDrawing();
-		ClearBackground(RAYWHITE);
+		ClearBackground(BG_CLOUD);
 		RenderScreen(screen, &game, frameDt, menuSelected);
 		FpsMeter_Draw();
 		EndDrawing();
